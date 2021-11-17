@@ -1,0 +1,11 @@
+# Target labels
+ utf8cpp
+# Source files and their labels
+/home/glasser/toys/prss/antlr/build/runtime/CMakeFiles/utf8cpp-build
+/home/glasser/toys/prss/antlr/build/runtime/CMakeFiles/utf8cpp-build.rule
+/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-build.rule
+/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-configure.rule
+/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-skip-update.rule
+/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-patch.rule
+/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-download.rule
+/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-mkdir.rule

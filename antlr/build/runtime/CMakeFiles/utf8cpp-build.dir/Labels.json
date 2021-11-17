@@ -1,0 +1,37 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/glasser/toys/prss/antlr/build/runtime/CMakeFiles/utf8cpp-build"
+		},
+		{
+			"file" : "/home/glasser/toys/prss/antlr/build/runtime/CMakeFiles/utf8cpp-build.rule"
+		},
+		{
+			"file" : "/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-build.rule"
+		},
+		{
+			"file" : "/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-configure.rule"
+		},
+		{
+			"file" : "/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-skip-update.rule"
+		},
+		{
+			"file" : "/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-patch.rule"
+		},
+		{
+			"file" : "/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-download.rule"
+		},
+		{
+			"file" : "/home/glasser/toys/prss/antlr/build/runtime/utf8cpp-prefix/src/utf8cpp-stamp/utf8cpp-mkdir.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"utf8cpp"
+		],
+		"name" : "utf8cpp-build"
+	}
+}

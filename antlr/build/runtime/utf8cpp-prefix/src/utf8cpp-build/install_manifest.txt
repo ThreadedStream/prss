@@ -1,0 +1,6 @@
+/home/glasser/toys/prss/antlr/build/runtime/thirdparty/utfcpp/install/include/utf8cpp/utf8/unchecked.h
+/home/glasser/toys/prss/antlr/build/runtime/thirdparty/utfcpp/install/include/utf8cpp/utf8/cpp11.h
+/home/glasser/toys/prss/antlr/build/runtime/thirdparty/utfcpp/install/include/utf8cpp/utf8/core.h
+/home/glasser/toys/prss/antlr/build/runtime/thirdparty/utfcpp/install/include/utf8cpp/utf8/checked.h
+/home/glasser/toys/prss/antlr/build/runtime/thirdparty/utfcpp/install/include/utf8cpp/utf8.h
+/home/glasser/toys/prss/antlr/build/runtime/thirdparty/utfcpp/install/lib/cmake/utf8cpp/utf8cppConfig.cmake
