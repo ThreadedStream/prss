@@ -4,9 +4,20 @@ set(GEN_INCLUDE_DIR include)
 
 find_library(ANTLR_SHARED_LIB NAMES libantlr4-runtime.so HINTS ${ANTLR_DIR}/dist)
 
-file(GLOB_RECURSE HEADER_FILES include/*.h)
-file(GLOB_RECURSE SRC_FILES src/*.cpp)
+set(HEADER_FILES include/Python3BaseVisitor.h
+                 include/Python3Lexer.h
+                 include/Python3Parser.h
+                 include/Python3Visitor.h
+                 include/Python3Listener.h
+                 include/Python3BaseListener.h)
 
-add_library(scene_parser SHARED ${HEADER_FILES} ${SRC_FILES})
+set(SOURCE_FILES src/Python3BaseVisitor.cpp
+                 src/Python3Lexer.cpp
+                 src/Python3Parser.cpp
+                 src/Python3Visitor.cpp
+                 src/Python3Listener.cpp
+                 src/Python3BaseListener.cpp)
+
+add_library(scene_parser SHARED ${HEADER_FILES} ${SOURCE_FILES})
 target_include_directories(scene_parser PUBLIC ${ANTLR_INCLUDE_DIR} ${GEN_INCLUDE_DIR})
 target_link_libraries(scene_parser PUBLIC ${ANTLR_SHARED_LIB})
