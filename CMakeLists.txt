@@ -22,7 +22,8 @@ set(BUILD_DIR ${BUILD_DIR} PARENT_SCOPE)
 
 #add_subdirectory(antlr)
 add_subdirectory(grammar/gen)
-add_subdirectory(scene_lang)
+add_subdirectory(prss_antlr)
+add_subdirectory(prss_no_antlr)
 
 
 #message("Binaries reside in ${BUILD_DIR}")

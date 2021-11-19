@@ -1,3 +1,1 @@
-
-
-x = x ^ y
+print(-input() + 2)

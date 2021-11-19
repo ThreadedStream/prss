@@ -18,6 +18,6 @@ set(SOURCE_FILES src/Python3BaseVisitor.cpp
                  src/Python3Listener.cpp
                  src/Python3BaseListener.cpp)
 
-add_library(scene_parser SHARED ${HEADER_FILES} ${SOURCE_FILES})
-target_include_directories(scene_parser PUBLIC ${ANTLR_INCLUDE_DIR} ${GEN_INCLUDE_DIR})
-target_link_libraries(scene_parser PUBLIC ${ANTLR_SHARED_LIB})
+add_library(prss_parser_antlr SHARED ${HEADER_FILES} ${SOURCE_FILES})
+target_include_directories(prss_parser_antlr PUBLIC ${ANTLR_INCLUDE_DIR} ${GEN_INCLUDE_DIR})
+target_link_libraries(prss_parser_antlr PUBLIC ${ANTLR_SHARED_LIB})
