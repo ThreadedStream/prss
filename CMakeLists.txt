@@ -5,6 +5,11 @@ project(prss CXX)
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/antlr/cmake)
 
 #include(ExternalAntlr4Cpp)
+set(ANTLR_DIR ${CMAKE_SOURCE_DIR}/antlr)
+set(ANTLR_DIR ${ANTLR_DIR} PARENT_SCOPE)
+
+set(ANTLR_INCLUDE_DIR ${ANTLR_DIR}/runtime/src)
+set(ANTLR_INCLUDE_DIR ${ANTLR_INCLUDE_DIR} PARENT_SCOPE)
 
 set(ANTLR_EXECUTABLE ${CMAKE_SOURCE_DIR}/antlr-4.9.2-complete.jar)
 
