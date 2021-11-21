@@ -6,77 +6,23 @@
 
 #include <numeric>
 #include "antlr4-runtime.h"
+#include "Python3Lexer.h"
 
 static constexpr int8_t EOF = (-1);
+
+static int32_t ssa_num = 0;
 
 template<typename T>
 using opt = std::optional<T>;
 
+using namespace antlr4;
+
 // TODO(threadedstream): quicky build a lexer and expression flattener
 
-// just copied it from Python3Lexer.h
-enum class TokenType : int8_t {
-    STRING = 1, NUMBER = 2, INTEGER = 3, DEF = 4, RETURN = 5, RAISE = 6,
-    FROM = 7, IMPORT = 8, AS = 9, GLOBAL = 10, NONLOCAL = 11, ASSERT = 12,
-    IF = 13, ELIF = 14, ELSE = 15, WHILE = 16, FOR = 17, IN = 18, TRY = 19,
-    FINALLY = 20, WITH = 21, EXCEPT = 22, LAMBDA = 23, OR = 24, AND = 25,
-    NOT = 26, IS = 27, NONE = 28, TRUE = 29, FALSE = 30, CLASS = 31, YIELD = 32,
-    DEL = 33, PASS = 34, CONTINUE = 35, BREAK = 36, ASYNC = 37, AWAIT = 38,
-    NEWLINE = 39, NAME = 40, STRING_LITERAL = 41, BYTES_LITERAL = 42, DECIMAL_INTEGER = 43,
-    OCT_INTEGER = 44, HEX_INTEGER = 45, BIN_INTEGER = 46, FLOAT_NUMBER = 47,
-    IMAG_NUMBER = 48, DOT = 49, ELLIPSIS = 50, STAR = 51, OPEN_PAREN = 52,
-    CLOSE_PAREN = 53, COMMA = 54, COLON = 55, SEMI_COLON = 56, POWER = 57,
-    ASSIGN = 58, OPEN_BRACK = 59, CLOSE_BRACK = 60, OR_OP = 61, XOR = 62,
-    AND_OP = 63, LEFT_SHIFT = 64, RIGHT_SHIFT = 65, ADD = 66, MINUS = 67,
-    DIV = 68, MOD = 69, IDIV = 70, NOT_OP = 71, OPEN_BRACE = 72, CLOSE_BRACE = 73,
-    LESS_THAN = 74, GREATER_THAN = 75, EQUALS = 76, GT_EQ = 77, LT_EQ = 78,
-    NOT_EQ_1 = 79, NOT_EQ_2 = 80, AT = 81, ARROW = 82, ADD_ASSIGN = 83,
-    SUB_ASSIGN = 84, MULT_ASSIGN = 85, AT_ASSIGN = 86, DIV_ASSIGN = 87,
-    MOD_ASSIGN = 88, AND_ASSIGN = 89, OR_ASSIGN = 90, XOR_ASSIGN = 91, LEFT_SHIFT_ASSIGN = 92,
-    RIGHT_SHIFT_ASSIGN = 93, POWER_ASSIGN = 94, IDIV_ASSIGN = 95, SKIP_ = 96,
-    UNKNOWN_CHAR = 97,
-};
 
 enum class AssignFlag : uint8_t {
     OP_ASSIGN = 0,
 };
-
-struct Token {
-    int32_t line;
-    int32_t column;
-    TokenType type;
-    const char *text;
-};
-
-class Lexer {
-public:
-
-    Token NextToken() {
-        if (LookAhead(1) == EOF && !idents_.empty()) {
-            for (auto i = tokens_.size() - 1; i > 0; i--) {
-            }
-        }
-
-        return Token{};
-    }
-
-    char LookAhead(int32_t n) {
-        if (curr_idx_ + n < source_.size()) { return EOF; }
-        return source_[curr_idx_ + n];
-    }
-
-    Token ProduceToken(const std::string &name, int32_t type) {
-
-        return Token{};
-    }
-
-private:
-    std::vector<Token> tokens_;
-    std::stack<int> idents_;
-    std::string source_;
-    int32_t curr_idx_;
-};
-
 
 
 // AST nodes for P0 subset
@@ -86,7 +32,7 @@ struct Node {
 
     virtual ~Node(){};
     virtual std::string str() const noexcept {
-        throw std::runtime_error("str is not implemented!!!\n");
+        return "";
     }
 };
 
@@ -202,7 +148,11 @@ struct UnarySub : public Node {
 };
 
 struct CallFunc : public Node {
-    CallFunc (Node* node, const std::vector<Node*>& args) : node_(node), args_(args){}
+    CallFunc (Name* name, const std::vector<Node*>& args) : name_(name), args_(args){}
+
+    ~CallFunc() {
+        delete name_;
+    }
 
     std::string str() const noexcept override{
         const std::string valid_args_fmt = args_.size() == 0 ? "[]" : ([&] () -> std::string {
@@ -210,13 +160,16 @@ struct CallFunc : public Node {
             for (const auto& arg : args_) {
                 arg_nodes_str += arg->str();
             }
+
+            return arg_nodes_str;
         })();
 
-        std::string call_func_str = "CallFunc(" + node_->str() + ", " + valid_args_fmt + ")";
+        std::string call_func_str = "CallFunc(" + name_->str() + ", " + valid_args_fmt + ")";
 
         return call_func_str;
     }
-    Node* node_;
+
+    Name* name_;
     std::vector<Node*> args_;
 };
 
@@ -249,7 +202,7 @@ int32_t astNumNodes(Node* node) {
     } else if (auto unary_sub = dynamic_cast<UnarySub*>(node)) {
         return 1 + astNumNodes(unary_sub->expr_);
     } else if (auto call_func = dynamic_cast<CallFunc*>(node)) {
-        return 1 + astNumNodes(call_func->node_);
+        return 1 + astNumNodes(call_func->name_);
     } else {
         throw std::runtime_error("encountered unknown ast node\n");
     }
@@ -259,30 +212,112 @@ std::string astStr(Node* root) noexcept{
     return root->str();
 }
 
+bool isSimpleStatement(const Token* tok, const Python3Lexer& lexer) {
+    return (tok->getType() == Python3Lexer::NAME && lexer._input->LA(1) != '(') ||
+            (tok->getType() == Python3Lexer::NUMBER);
+}
 
-void flattenP0(const std::string& str) noexcept {
-    // TODO(threadedstream): fill that up
+void breakdownComplexStatement(const Token* token) {
+
+}
+
+std::string visitCallFunc(CallFunc* call_func);
+std::string visitNode(Node* node);
+
+std::string visitCallFunc(CallFunc* root) {
+    std::string code;
+    if (!root->args_.size()) {
+        ssa_num++;
+        return code += "tmp" + std::to_string(ssa_num-1) + " = " + root->name_->name_ + "()";
+    } else {
+        // reduce arguments
+        for (const auto& arg : root->args_) {
+            code += visitNode(arg);
+            ssa_num++;
+        }
+
+        code += "\n" + root->name_->name_ + "(tmp" + std::to_string(ssa_num-1) + ")";
+    }
+
+    return code;
+}
+
+// useful in more general cases
+std::string visitNode(Node* node) {
+    std::string code;
+    if (const auto call_func = dynamic_cast<CallFunc*>(node)) {
+        code += visitCallFunc(call_func);
+    } else if (const auto add_expr = dynamic_cast<Add*>(node)){
+        code += visitNode(add_expr->left_);
+        code += "\ntmp" + std::to_string(ssa_num) + " = " + "tmp" + std::to_string(ssa_num-1) + " + ";
+        code += visitNode(add_expr->right_);
+    } else if (const auto const_expr = dynamic_cast<Const*>(node)) {
+        return std::to_string(std::any_cast<int32_t>(const_expr->value_));
+    } else if (const auto unary_sub = dynamic_cast<UnarySub*>(node)) {
+        code += visitNode(unary_sub->expr_);
+        code += "\ntmp" + std::to_string(ssa_num) + " = -" + "tmp" + std::to_string(ssa_num-1);
+        ssa_num++;
+    }
+    return code;
+}
+
+void flattenP0(Node* node) noexcept {
+    // TODO(threadedstream): traverse down the whole tree
     int32_t tmp_counter = 0;
+
+    // print(-input() + 2) should take the following form
+    // tmp0 = input()
+    // tmp1 = -tmp0
+    // tmp2 = tmp1 + 2
+    // print(tmp2)
+
+    // the question here is whether i achieve it using ast or
+    // solely relying on lexing
+
+    // intuition tells me that the former approach is more suitable, as
+    // process requires an actual separation of complex and simple statements
+
+    // simple statements are meant to be the ones involving no operators, function calls, etc.
+    // for instance, variables and constants are great examples of such expressions.
+
 }
 
 
 int main(int argc, const char* argv[]) {
-    // i need to flatten this whole thing somehow
-    std::vector<Node*> printnl_nodes;
+//    if (argc < 2) {
+//        std::puts("Usage: ./<program_name> <path_to_file>\n");
+//        return -1;
+//    }
+//
+//    std::ifstream stream(argv[1]);
+//    if (!stream) {
+//        std::puts("make sure you specified the right path\n");
+//        return -1;
+//    }
+//
+//    ANTLRInputStream input_stream(stream);
+//
+//    Python3Lexer lexer(&input_stream);
+//    CommonTokenStream token_stream(&lexer);
+//    token_stream.fill();
+
+
+    std::vector<Node*> print_func_args;
     CallFunc *call_func = new CallFunc(new Name("input"), {});
     UnarySub *unary_sub = new UnarySub(call_func);
     Add *add = new Add(unary_sub, new Const(std::make_any<int32_t>(2)));
-    printnl_nodes.push_back(add);
-    Printnl *printnl = new Printnl(printnl_nodes, nullptr);
-    Stmt *stmt = new Stmt({printnl});
+    print_func_args.push_back(add);
+    CallFunc *print_func = new CallFunc(new Name("print"), print_func_args);
+    Stmt *stmt = new Stmt({print_func});
     Module *module = new Module("", stmt);
 
+    const auto code = visitCallFunc(print_func);
 
     delete call_func;
     delete unary_sub;
     delete add;
 
-    delete printnl;
+    delete print_func;
     delete stmt;
     delete module;
 
