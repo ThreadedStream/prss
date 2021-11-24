@@ -76,6 +76,8 @@ struct Node {
     virtual std::string str() const noexcept {
         return "";
     }
+
+    virtual void addChild(Node* n) noexcept {}
 };
 
 struct Module : public Node {
@@ -84,6 +86,10 @@ struct Module : public Node {
     std::string str() const noexcept override {
         const std::string valid_doc_fmt = doc_ != "" ? doc_ : "None";
         return "Module(" + valid_doc_fmt + ", " + expr_->str() + ")";
+    }
+
+    virtual void addChild(Node* n) noexcept override{
+        expr_ = n;
     }
 
     Node *expr_;
@@ -103,6 +109,10 @@ struct Stmt : public Node {
         stmt_str += "])";
 
         return stmt_str;
+    }
+
+    virtual void addChild(Node* n) noexcept override{
+        nodes_.push_back(n);
     }
 
     std::vector<Node *> nodes_;
@@ -145,6 +155,10 @@ struct AssName : public Node {
 struct Discard : public Node {
     Discard(Node *expr) : expr_(expr) {}
 
+    virtual void addChild(Node* n) noexcept override{
+        expr_ = n;
+    }
+
     Node *expr_;
 };
 
@@ -175,6 +189,7 @@ struct Add : public Node {
     std::string str() const noexcept override {
         return "Add(" + left_->str() + ", " + right_->str() + ")";
     }
+
 
     Node *left_;
     Node *right_;
@@ -274,7 +289,7 @@ std::string astStr(Node *root) noexcept {
 
 std::string flattenCallFunc(CallFunc *root) {
     std::string code;
-    if (!root->args_.size()) {
+    if (!root->args_.empty()) {
         ssa_num++;
         return code += "\ntmp" + std::to_string(ssa_num - 1) + " = " + root->name_->name_ + "()";
     } else {
@@ -345,7 +360,6 @@ public:
             curr = tokens_[curr_idx_ + n];
             curr_idx_ += n;
         }
-        return;
     }
 
 public:
@@ -374,26 +388,28 @@ Add *visitAdd(PyLexer &lexer, Node* &parent) {
         }
     }
 
+    parent->addChild(add);
+
     return add;
 }
 
-CallFunc* visitCallFunc(PyLexer &lexer) {
+CallFunc* visitCallFunc(PyLexer &lexer, Node*& parent) {
     // no arguments by default
     CallFunc *call_func = new CallFunc(new Name(lexer.curr->getText()), {});
-
 
     lexer.updateCurr(2);
     while (lexer.curr->getType() != Python3Lexer::CLOSE_PAREN) {
         // function has some arguments
         switch (lexer.curr->getType()) {
             case Python3Lexer::ADD:
-                auto add_node = visitAdd(lexer);
+                auto add_node = visitAdd(lexer, parent);
                 break;
             case Python3Lexer::MINUS:
                 break;
         }
     }
 
+    parent->addChild(call_func);
     return call_func;
 }
 
