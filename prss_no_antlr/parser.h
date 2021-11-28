@@ -11,17 +11,17 @@
 #include "Python3Lexer.h"
 
 
-#define ADD_OPERANDS_CASE(target, parent) \
+#define ADD_OPERANDS_CASE(target, parent, token) \
     case Python3Lexer::NUMBER: \
-        (target) = new Const( \
-                std::make_any<int64_t>( \
-                        std::atol(prev_token->getText().c_str()) \
-                ) \
-        ); \
+        (target) = visitConst(token, parent); \
+        break;\
     case Python3Lexer::NAME: \
-        (target) = new Name(prev_token->getText()); \
-    case Python3Lexer::CLOSE_PAREN: \
-        (target) = visitCallFunc(lexer, parent); \
+        (target) = new Name((token)->getText()); \
+        break;
+
+
+//    case Python3Lexer::CLOSE_PAREN: \
+//        (target) = visitCallFunc(lexer, parent); \
 
 static constexpr int8_t EOF = (-1);
 
@@ -33,8 +33,6 @@ using opt = std::optional<T>;
 using namespace antlr4;
 
 // TODO(threadedstream): quicky build a lexer and expression flattener
-
-
 
 enum class AssignFlag : uint8_t {
     OP_ASSIGN = 0,
@@ -69,6 +67,9 @@ std::string flattenCallFunc(CallFunc *call_func);
 std::string flattenNode(Node *node);
 
 
+static Node* current_parent = nullptr;
+static Node* prev_parent = nullptr;
+
 // AST nodes for P0 subset
 struct Node {
     // TODO(threadedstream): fill in the rest
@@ -79,7 +80,9 @@ struct Node {
         return "";
     }
 
-    virtual void addChild(Node *n) noexcept {}
+    // n - child to add to the parent node
+    // next_arg - needed for functions (likely to be removed)
+    virtual void addChild(Node *n, const bool next_arg = false) noexcept {}
 };
 
 struct Module : public Node {
@@ -90,7 +93,7 @@ struct Module : public Node {
         return "Module(" + valid_doc_fmt + ", " + expr_->str() + ")";
     }
 
-    virtual void addChild(Node *n) noexcept override {
+    virtual void addChild(Node *n, const bool) noexcept override{
         expr_ = n;
     }
 
@@ -113,7 +116,7 @@ struct Stmt : public Node {
         return stmt_str;
     }
 
-    virtual void addChild(Node *n) noexcept override {
+    virtual void addChild(Node *n, const bool) noexcept override {
         nodes_.push_back(n);
     }
 
@@ -157,7 +160,7 @@ struct AssName : public Node {
 struct Discard : public Node {
     Discard(Node *expr) : expr_(expr) {}
 
-    virtual void addChild(Node *n) noexcept override {
+    virtual void addChild(Node *n) noexcept {
         expr_ = n;
     }
 
@@ -168,7 +171,7 @@ struct Const : public Node {
     Const(std::any value) : value_(value) {}
 
     std::string str() const noexcept override {
-        const int32_t int_val = std::any_cast<int32_t>(value_);
+        const int64_t int_val = std::any_cast<int64_t>(value_);
         return "Const(" + std::to_string(int_val) + ")";
     }
 
@@ -208,7 +211,8 @@ struct UnarySub : public Node {
 };
 
 struct CallFunc : public Node {
-    CallFunc(Name *name, const std::vector<Node *> &args) : name_(name), args_(args) {}
+    CallFunc(Name *name, const std::vector<Node *> &args) : name_(name), args_(args) {
+    }
 
     ~CallFunc() {
         delete name_;
@@ -229,12 +233,29 @@ struct CallFunc : public Node {
         return call_func_str;
     }
 
+    virtual void addChild(Node *n, const bool next_arg = false) noexcept override {
+        if (args_.empty()) {
+            args_.push_back(n);
+            return;
+        }
+
+        if (!next_arg) {
+            args_[curr_arg_num] = n;
+        } else {
+            args_.push_back(n);
+            curr_arg_num++;
+        }
+
+    }
+
+
     Name *name_;
     std::vector<Node *> args_;
+    int32_t curr_arg_num = 0;
 };
 
 
-// TODO(threadedstream): To be finished. Should really be thinking of better way to write this function
+// TODO(threadedstream): To be finished. Should really be thinking of the way to give that function a better look
 int32_t astNumNodes(Node *node) {
     // mmmm, spaghetti
     if (auto mod = dynamic_cast<Module *>(node)) {
@@ -362,10 +383,10 @@ public:
             curr = tokens_[curr_idx_];
             curr_idx_ += 1;
         }
-        (void)n;
+        (void) n;
     }
 
-    inline std::vector<Token*> tokens() const noexcept { return tokens_; }
+    inline std::vector<Token *> tokens() const noexcept { return tokens_; }
 
     ~PyLexer() {
         delete token_stream;
@@ -380,21 +401,35 @@ private:
     int32_t curr_idx_ = 0;
 };
 
+Const *visitConst(Token* tok, Node *&parent) {
+    auto const_val = new Const(std::make_any<int64_t>(
+                                       std::atol(tok->getText().c_str())
+                               )
+    );
+
+    parent->addChild(const_val);
+
+    return const_val;
+}
 
 Add *visitAdd(PyLexer &lexer, Node *&parent) {
     auto add = new Add(nullptr, nullptr);
     // get left operand
-    const auto prev_token = lexer.lookAhead(-1);
-    if (prev_token) {
-        switch (prev_token->getType()) {
-            ADD_OPERANDS_CASE(add->left_, parent)
+    if (dynamic_cast<Add*>(prev_parent)) {
+        add->left_ = prev_parent;
+    } else {
+        auto prev_token = lexer.lookAhead(-1);
+        if (prev_token) {
+            switch (prev_token->getType()) {
+                ADD_OPERANDS_CASE(add->left_, reinterpret_cast<Node *&>(add), prev_token)
+            }
         }
     }
 
     const auto next_token = lexer.lookAhead(1);
     if (next_token) {
         switch (next_token->getType()) {
-            ADD_OPERANDS_CASE(add->right_, parent)
+            ADD_OPERANDS_CASE(add->right_, reinterpret_cast<Node *&>(add), next_token)
         }
     }
 
@@ -405,27 +440,43 @@ Add *visitAdd(PyLexer &lexer, Node *&parent) {
     return add;
 }
 
+
 CallFunc *visitCallFunc(PyLexer &lexer, Node *&parent) {
     // no arguments by default
     CallFunc *call_func = new CallFunc(new Name(lexer.curr->getText()), {});
     lexer.updateCurr(1);
     lexer.updateCurr(1);
 
-    std::cout << lexer.curr->getType() << '\n';
+    current_parent = call_func;
     while (lexer.curr->getType() != Python3Lexer::CLOSE_PAREN) {
+        std::cout << lexer.curr->getText() << '\n';
         // function has some arguments
         switch (lexer.curr->getType()) {
-            case Python3Lexer::ADD:
-                visitAdd(lexer, parent);
-                break;
             case Python3Lexer::NAME: {
                 const auto next_token = lexer.lookAhead(1);
                 if (next_token && next_token->getType() == Python3Lexer::OPEN_PAREN) {
-                    visitCallFunc(lexer, reinterpret_cast<Node *&>(call_func));
+                    auto call_func_node = visitCallFunc(lexer, current_parent);
+                    current_parent->addChild(call_func_node);
+                    prev_parent = current_parent;
+                    current_parent = call_func_node;
+                    lexer.updateCurr(1);
                 }
-            }
+            }break;
+            case Python3Lexer::ADD: {
+                auto add_node = visitAdd(lexer, current_parent);
+                prev_parent = add_node;
+                current_parent = call_func;
+            }break;
+            default: {
+                auto next_tok = lexer.lookAhead(1);
+                if (next_tok && next_tok->getType() == Python3Lexer::ADD) {
+                    lexer.updateCurr(1);
+                    auto add_node = visitAdd(lexer, current_parent);
+                    prev_parent = add_node;
+                    current_parent = call_func;
+                }
+            }break;
         }
-        lexer.updateCurr(1);
     }
 
     parent->addChild(call_func);
@@ -437,13 +488,13 @@ Assign *visitAssign(PyLexer &lexer) {
 }
 
 
-void constructAst(PyLexer &lexer) {
-    auto module = new Module("", nullptr);
+Node* constructAst(PyLexer &lexer) {
+    static auto module = new Module("", nullptr);
     lexer.updateCurr(1);
-    std::cout << lexer.curr->getType()  << '\n';
+    std::cout << lexer.curr->getType() << '\n';
     const auto next_token = lexer.lookAhead(1);
     if (!next_token) {
-        return;
+        return nullptr;
     }
     std::cout << next_token->getType() << '\n';
     if (lexer.curr->getType() == Python3Lexer::NAME) {
@@ -458,4 +509,7 @@ void constructAst(PyLexer &lexer) {
     } else if (lexer.curr->getType() == Python3Lexer::NEWLINE) {
         constructAst(lexer);
     }
+
+    return module;
 }
+

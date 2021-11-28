@@ -9,8 +9,10 @@ int main(int argc, const char *argv[]) {
 
     PyLexer lexer(argv[1]);
 
-    constructAst(lexer);
+    auto root = constructAst(lexer);
+    const auto ast_str = root->str();
 
+    std::cout << ast_str << '\n';
 
     return 0;
 }
