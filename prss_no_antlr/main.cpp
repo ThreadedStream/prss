@@ -9,7 +9,7 @@ int main(int argc, const char *argv[]) {
 
     PyLexer lexer(argv[1]);
 
-    auto root = constructAst(lexer);
+    auto root = buildAst(lexer);
     const auto ast_str = root->str();
 
     std::cout << ast_str << '\n';
