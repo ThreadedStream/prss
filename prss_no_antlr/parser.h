@@ -15,9 +15,15 @@
     case Python3Lexer::NUMBER: \
         (target) = visitConst(token, parent); \
         break;\
-    case Python3Lexer::NAME: \
-        (target) = new Name((token)->getText()); \
-        break;
+    default:                                     \
+        const auto next_next_tok = lexer.lookAhead(2);                                         \
+        if (token->getType() == Python3Lexer::NAME &&                                     \
+        next_next_tok &&                              \
+        next_next_tok->getType() == Python3Lexer::OPEN_PAREN) {                                \
+            lexer.updateCurr(1);                                     \
+            (target) = visitCallFunc(lexer, parent);                                         \
+        }                                          \
+
 
 
 //    case Python3Lexer::CLOSE_PAREN: \
@@ -340,7 +346,7 @@ std::string flattenNode(Node *node) {
                 "tmp" + std::to_string(ssa_num - 2) + " + " +
                 "tmp" + std::to_string(ssa_num - 1);
     } else if (const auto const_expr = dynamic_cast<Const *>(node)) {
-        return std::to_string(std::any_cast<int32_t>(const_expr->value_));
+        return std::to_string(std::any_cast<int64_t>(const_expr->value_));
     } else if (const auto unary_sub = dynamic_cast<UnarySub *>(node)) {
         code += flattenNode(unary_sub->expr_);
         code += "\ntmp" + std::to_string(ssa_num) + " = -" + "tmp" + std::to_string(ssa_num - 1);
@@ -448,7 +454,7 @@ CallFunc *visitCallFunc(PyLexer &lexer, Node *&parent) {
     lexer.updateCurr(1);
 
     current_parent = call_func;
-    while (lexer.curr->getType() != Python3Lexer::CLOSE_PAREN) {
+    while (lexer.curr->getType() != Python3Lexer::CLOSE_PAREN && lexer.curr->getType() != Python3Lexer::EOF) {
         std::cout << lexer.curr->getText() << '\n';
         // function has some arguments
         switch (lexer.curr->getType()) {
