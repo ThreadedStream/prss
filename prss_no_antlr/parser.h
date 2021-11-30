@@ -25,11 +25,9 @@
         }                                          \
 
 
-
 //    case Python3Lexer::CLOSE_PAREN: \
 //        (target) = visitCallFunc(lexer, parent); \
 
-static constexpr int8_t EOF = (-1);
 
 static int32_t ssa_num = 0;
 
@@ -75,15 +73,19 @@ std::string flattenCallFunc(CallFunc *call_func);
 std::string flattenNode(Node *node);
 
 
-Node* parseFuncCall(PyLexer& lexer);
-Node* parseLiteral(PyLexer& lexer);
-Node* parseIdentifier(PyLexer& lexer);
-Node* parseOperator(PyLexer& lexer);
-Node* parseExpression(PyLexer& lexer);
+Node *parseFuncCall(PyLexer &lexer);
+
+Node *parseLiteral(PyLexer &lexer);
+
+Node *parseIdentifier(PyLexer &lexer);
+
+Node *parseBinOp(PyLexer &lexer);
+
+Node *parseExpression(PyLexer &lexer);
 
 
-static Node* current_parent = nullptr;
-static Node* prev_parent = nullptr;
+static Node *current_parent = nullptr;
+static Node *prev_parent = nullptr;
 
 // AST nodes for P0 subset
 struct Node {
@@ -108,7 +110,7 @@ struct Module : public Node {
         return "Module(" + valid_doc_fmt + ", " + expr_->str() + ")";
     }
 
-    virtual void addChild(Node *n, const bool) noexcept override{
+    virtual void addChild(Node *n, const bool) noexcept override {
         expr_ = n;
     }
 
@@ -269,7 +271,7 @@ struct CallFunc : public Node {
 };
 
 int32_t sign(int32_t n) {
-    return (1 * (n > 0));
+    return (-1 * (n > 0));
 }
 
 class PyLexer {
@@ -299,14 +301,24 @@ public:
     }
 
     void updateCurr(int32_t n) {
-        const auto look_ahead_idx = curr_idx_ + n - sign(n);
+        const auto look_ahead_idx = curr_idx_ + n - 1;
         if (look_ahead_idx >= num_of_tokens_ ||
             look_ahead_idx < 0) {
 
             curr = nullptr;
         }
+        prev = curr;
         curr = tokens_[look_ahead_idx];
-        curr_idx_ += n;
+        curr_idx_ += 1;
+        next = lookAhead(1);
+        (void) n;
+    }
+
+    void backtrack() {
+        next = curr;
+        curr = prev;
+        curr_idx_--;
+        prev = lookAhead(-1);
     }
 
     inline std::vector<Token *> tokens() const noexcept { return tokens_; }
@@ -317,6 +329,9 @@ public:
 
 public:
     Token *curr;
+    Token *next;
+    Token *prev;
+
 private:
     CommonTokenStream *token_stream;
     std::vector<Token *> tokens_;
@@ -379,82 +394,99 @@ std::string astStr(Node *root) noexcept {
 // simple statements are meant to be the ones involving no operators, function calls, etc.
 // for instance, variables and constants are great examples of such expressions.
 
-bool isOperator(const Token* tok) {
+bool isOperator(const Token *tok) {
     return tok->getType() == Python3Lexer::ADD || tok->getType() == Python3Lexer::MINUS;
 }
 
-Node* parseFuncCall(PyLexer& lexer) {
+Node *parseFuncCall(PyLexer &lexer) {
     auto function_call = new CallFunc(new Name(lexer.curr->getText()), {});
     lexer.updateCurr(1);
     lexer.updateCurr(1);
     // parse function parameters
     std::cout << lexer.curr->getText() << '\n';
 
-    Node* arg_expr = nullptr;
+    Node *arg_expr = nullptr;
     while (lexer.curr->getType() != Python3Lexer::CLOSE_PAREN) {
         arg_expr = parseExpression(lexer);
+        lexer.updateCurr(1);
     }
 
     function_call->args_.push_back(arg_expr);
 
-    return nullptr;
+    return function_call;
 }
 
 
-Node* parseIdentifier(PyLexer& lexer) {
+Node *parseIdentifier(PyLexer &lexer) {
     const auto next_token = lexer.lookAhead(1);
     if (next_token->getType() == Python3Lexer::OPEN_PAREN) {
         return parseFuncCall(lexer);
     }
+    // replace it by instantiating Name object
     return nullptr;
 }
 
-Node* parseLiteral(PyLexer& lexer) {
+Node *parseLiteral(PyLexer &lexer) {
+    Const *lit;
     switch (lexer.curr->getType()) {
         case Python3Lexer::STRING:
-            return new Const(std::make_any<std::string>(lexer.curr->getText()));
+            lit = new Const(std::make_any<std::string>(lexer.curr->getText()));
         case Python3Lexer::NUMBER:
-            return new Const(std::make_any<int64_t>(std::atol(lexer.curr->getText().c_str())));
+            lit = new Const(std::make_any<int64_t>(std::atol(lexer.curr->getText().c_str())));
     }
+    lexer.updateCurr(1);
+    return lit;
 }
 
-Node* parseOperator(PyLexer& lexer) {
-    auto bin_op = new BinOp(nullptr, nullptr, lexer.curr->getType());
+Node *parseBinOp(PyLexer &lexer) {
+    auto bin_op = new BinOp(nullptr, nullptr, -1);
 
-    lexer.updateCurr(-1);
+    // LIT { ( op LIT ) }
     bin_op->left_ = parseExpression(lexer);
+    bin_op->op = lexer.curr->getType();
 
     lexer.updateCurr(1);
     bin_op->right_ = parseExpression(lexer);
 
-
     return bin_op;
 }
 
+// expr -> sum
+// sum -> digit { (op digit) }
 
-Node* parseExpression(PyLexer& lexer) {
+// 1 + 2 + 3 + 4
+Node *parseExpression(PyLexer &lexer) {
     switch (lexer.curr->getType()) {
-        case Python3Lexer::NAME:
-            return parseIdentifier(lexer);
         case Python3Lexer::ADD:
         case Python3Lexer::MINUS:
-            return parseOperator(lexer);
+            return parseBinOp(lexer);
         default:
             if (lexer.curr->getType() == Python3Lexer::STRING ||
-                lexer.curr->getType() == Python3Lexer::NUMBER)
-                const auto next_token = lexer.lookAhead(1);
-                return parseLiteral(lexer);
+                lexer.curr->getType() == Python3Lexer::NUMBER ||
+                lexer.curr->getType() == Python3Lexer::NAME) {
+                if (lexer.next && isOperator(lexer.next)) {
+                    return parseBinOp(lexer);
+                }
+                switch (lexer.curr->getType()) {
+                    case Python3Lexer::STRING:
+                    case Python3Lexer::NUMBER:
+                        return parseLiteral(lexer);
+                    case Python3Lexer::NAME:
+                        return parseIdentifier(lexer);
+                }
+            }
     }
-    return nullptr;
 }
 
-Node* buildAst(PyLexer& lexer) {
+Node *buildAst(PyLexer &lexer) {
     Module *module = new Module("", nullptr);
     lexer.updateCurr(1);
-    std::cout << lexer.curr->getText() << '\n';
-    while (lexer.curr->getType() != Python3Lexer::EOF) {
-        module->expr_ = parseExpression(lexer);
+    if (lexer.curr->getType() == Python3Lexer::NEWLINE) {
         lexer.updateCurr(1);
+    }
+
+    if (lexer.curr->getType() != Python3Lexer::EOF) {
+        module->expr_ = parseExpression(lexer);
     }
 
     return module;
@@ -501,7 +533,7 @@ Node* buildAst(PyLexer& lexer) {
 //}
 
 
-Const *visitConst(Token* tok, Node *&parent) {
+Const *visitConst(Token *tok, Node *&parent) {
     auto const_val = new Const(std::make_any<int64_t>(
                                        std::atol(tok->getText().c_str())
                                )

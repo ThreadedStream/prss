@@ -1,2 +1,2 @@
 
-print(1 + 2 + input())
+print(input() + 2 + 12)
