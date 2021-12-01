@@ -8,9 +8,10 @@ set(GEN_DIR ${CMAKE_SOURCE_DIR}/grammar/gen)
 set(GEN_INCLUDE_DIR ${GEN_DIR}/include)
 set(SCENE_LANG_INCLUDE_DIR include)
 
-find_library(GEN_SHARED_LIB NAMES libprss_parser_antlr.so HINTS ${BUILD_DIR}/grammar/gen)
+#find_library(GEN_SHARED_LIB NAMES libprss_parser_antlr.so HINTS ${BUILD_DIR}/grammar/gen)
 find_library(ANTLR_SHARED_LIB NAMES libantlr4-runtime.so HINTS ${ANTLR_DIR}/dist)
 
 add_executable(prss_lang_antlr src/main.cpp include/PyParser.h)
 target_include_directories(prss_lang_antlr PUBLIC ${GEN_INCLUDE_DIR} ${ANTLR_INCLUDE_DIR} ${SCENE_LANG_INCLUDE_DIR} ${CIMG_INCLUDE_DIR})
-target_link_libraries(prss_lang_antlr PUBLIC ${GEN_SHARED_LIB} ${ANTLR_SHARED_LIB})
+target_link_libraries(prss_lang_antlr PUBLIC ${ANTLR_SHARED_LIB} )
+#${GEN_SHARED_LIB}
