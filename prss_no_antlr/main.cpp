@@ -14,26 +14,7 @@ int main(int argc, const char *argv[]) {
 
     std::cout << ast_str << '\n';
 
-
-//    lexer.updateCurr(1);
-//    std::cout << "prev: " << lexer.prev << ", ";
-//    std::cout << "curr: " << lexer.curr->getType() << ", ";
-//    std::cout << "next: " << lexer.next->getType() << '\n';
-//
-//    lexer.updateCurr(1);
-//    std::cout << "prev: " << lexer.prev->getType() << ", ";
-//    std::cout << "curr: " << lexer.curr->getType() << ", ";
-//    std::cout << "next: " << lexer.next->getType() << '\n';
-//
-//    lexer.updateCurr(1);
-//    std::cout << "prev: " << lexer.prev->getType() << ", ";
-//    std::cout << "curr: " << lexer.curr->getType() << ", ";
-//    std::cout << "next: " << lexer.next->getType() << '\n';
-//
-//    lexer.backtrack();
-//    std::cout << "prev: " << lexer.prev->getType() << ", ";
-//    std::cout << "curr: " << lexer.curr->getType() << ", ";
-//    std::cout << "next: " << lexer.next->getType() << '\n';
+    destroyAst(root);
 
     return 0;
 }
