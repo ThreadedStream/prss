@@ -9,7 +9,6 @@ int main(int argc, const char *argv[]) {
 
     PyLexer lexer(argv[1]);
 
-
     auto root = buildAst(lexer);
     const auto ast_str = root->str();
 
@@ -26,7 +25,6 @@ int main(int argc, const char *argv[]) {
 //    std::cout << "curr: " << lexer.curr->getType() << ", ";
 //    std::cout << "next: " << lexer.next->getType() << '\n';
 //
-//
 //    lexer.updateCurr(1);
 //    std::cout << "prev: " << lexer.prev->getType() << ", ";
 //    std::cout << "curr: " << lexer.curr->getType() << ", ";
@@ -39,5 +37,3 @@ int main(int argc, const char *argv[]) {
 
     return 0;
 }
-
-#pragma clang diagnostic pop

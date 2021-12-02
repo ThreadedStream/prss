@@ -60,16 +60,54 @@ class PyLexer;
 int32_t astNumNodes(Node *node);
 
 Node *parseAtomExpr(PyLexer &lexer);
-
 Node *parsePower(PyLexer &lexer);
+Node *parseTerm(PyLexer &lexer);
+Node *parseArithExpr(PyLexer &lexer);
+Node *parseTfpDef(PyLexer& lexer);
+Node *parseTypedArgsList(PyLexer& lexer);
+Node *parseComparison(PyLexer &lexer);
+Node *parseExpr(PyLexer& lexer);
+Node *parseStarExpr(PyLexer& lexer);
+Node *parseXorExpr(PyLexer& lexer);
+Node *parseAndExpr(PyLexer& lexer);
+Node *parseShiftExpr(PyLexer& lexer);
+Node *parseTest(PyLexer& lexer);
+Node *parseTestNoCond(PyLexer& lexer);
+Node *parseLambDef(PyLexer& lexer);
+Node *parseLambDefNoCond(PyLexer& lexer);
+Node *parseOrTest(PyLexer& lexer);
+Node *parseAndTest(PyLexer& lexer);
+Node *parseArgList(PyLexer& lexer);
+Node *parseArgument(PyLexer& lexer);
 
-Node *parseTerm(PyLexer& lexer);
 
-Node *parseArithExpr(PyLexer& lexer);
 
-Node *parseComparison(PyLexer& lexer);
+bool isArithOp(const Token *tok) {
+    const auto token_type = tok->getType();
+    return token_type == Python3Lexer::ADD || token_type == Python3Lexer::MINUS;
+}
 
-// helpers
+bool isTermOp(const Token *tok) {
+    const auto token_type = tok->getType();
+    return token_type == Python3Lexer::STAR ||
+           token_type == Python3Lexer::DIV ||
+           token_type == Python3Lexer::IDIV ||
+           token_type == Python3Lexer::MOD;
+}
+
+bool isCompOp(const Token *tok) {
+    const auto token_type = tok->getType();
+
+    return token_type == Python3Lexer::LESS_THAN ||
+           token_type == Python3Lexer::GREATER_THAN ||
+           token_type == Python3Lexer::EQUALS ||
+           token_type == Python3Lexer::GT_EQ ||
+           token_type == Python3Lexer::LT_EQ ||
+           token_type == Python3Lexer::NOT_EQ_2 ||
+           token_type == Python3Lexer::IN ||
+           token_type == Python3Lexer::NOT ||
+           token_type == Python3Lexer::IS;
+}
 
 std::string tokTypeToStr(const int32_t tok_type) {
     switch (tok_type) {
@@ -89,13 +127,24 @@ std::string tokTypeToStr(const int32_t tok_type) {
             return "TokNum";
         case Python3Lexer::STRING:
             return "TokStr";
+        case Python3Lexer::XOR:
+            return "TokXor";
+        case Python3Lexer::OR:
+            return "TokOr";
+        case Python3Lexer::AND:
+            return "TokAnd";
+        case Python3Lexer::OR_OP:
+            return "TokOrOp";
+        case Python3Lexer::AND_OP:
+            return "TokAndOp";
+        case Python3Lexer::NOT_OP:
+            return "TokNotOp";
+        case Python3Lexer::NOT:
+            return "TokNot";
         default:
             return "TokUnknown";
     }
 }
-
-static Node *current_parent = nullptr;
-static Node *prev_parent = nullptr;
 
 // AST nodes for P0 subset
 struct Node {
@@ -129,7 +178,7 @@ struct Module : public Node {
 };
 
 struct Stmt : public Node {
-    Stmt(const std::vector<Node *> &nodes) : nodes_(nodes) {
+    explicit Stmt(const std::vector<Node *> &nodes) : nodes_(nodes) {
     }
 
     std::string str() const noexcept override {
@@ -151,21 +200,21 @@ struct Stmt : public Node {
 };
 
 struct Assign : public Node {
-    Assign(const std::vector<Node *> &assignees, Node *assigner) : assignees_(assignees), assigner_(assigner) {}
+    explicit Assign(const std::vector<Node *> &assignees, Node *assigner) : assignees_(assignees), assigner_(assigner) {}
 
     std::vector<Node *> assignees_;
     Node *assigner_;
 };
 
 struct AssName : public Node {
-    AssName(const std::string &name, AssignFlag flags) : name_(name), flags_(flags) {}
+    explicit AssName(const std::string &name, AssignFlag flags) : name_(name), flags_(flags) {}
 
     std::string name_;
     AssignFlag flags_;
 };
 
 struct Discard : public Node {
-    Discard(Node *expr) : expr_(expr) {}
+    explicit Discard(Node *expr) : expr_(expr) {}
 
     virtual void addChild(Node *n) noexcept {
         expr_ = n;
@@ -175,7 +224,7 @@ struct Discard : public Node {
 };
 
 struct Const : public Node {
-    Const(const std::string &value, const int32_t type) : value_(value), type(type) {}
+    explicit Const(const std::string &value, const int32_t type) : value_(value), type(type) {}
 
     std::string str() const noexcept override {
         return "Const(value = " + value_ + ", type = " + tokTypeToStr(type) + ")";
@@ -186,7 +235,7 @@ struct Const : public Node {
 };
 
 struct Name : public Node {
-    Name(const std::string &name) : name_(name) {}
+    explicit Name(const std::string &name) : name_(name) {}
 
     std::string str() const noexcept override {
         return "Name(value = '" + name_ + "')";
@@ -196,7 +245,7 @@ struct Name : public Node {
 };
 
 struct BinOp : public Node {
-    BinOp(Node *left, Node *right, int32_t op) : left_(left), right_(right), op(op) {}
+    explicit BinOp(Node *left, Node *right, int32_t op) : left_(left), right_(right), op(op) {}
 
     std::string str() const noexcept override {
         return "BinOp(left = " + left_->str() + ",right = " + right_->str() + ",op = " + tokTypeToStr(op) + ")";
@@ -208,11 +257,11 @@ struct BinOp : public Node {
 };
 
 struct UnaryOp : public Node {
-    UnaryOp(int32_t op, Node *expr) : op(op), expr_(expr) {}
+    explicit UnaryOp(int32_t op, Node *expr) : op(op), expr_(expr) {}
 
     std::string str() const noexcept override {
         return "UnarySub(expr = " + expr_->str() +
-               ", op = " + std::to_string(op) + ")";
+               ", op = " + tokTypeToStr(op) + ")";
     }
 
     int32_t op;
@@ -220,14 +269,14 @@ struct UnaryOp : public Node {
 };
 
 struct Comparison : public Node {
-    Comparison(Node* left, Node* right, const int32_t op) : left(left), right(right), op(op) {}
+    explicit Comparison(Node *left, Node *right, const int32_t op) : left(left), right(right), op(op) {}
 
     std::string str() const noexcept override {
         std::string str = "Compare(left=" + left->str() + ", right=" + right->str() + ", op=" + tokTypeToStr(op);
     }
 
-    Node* left;
-    Node* right;
+    Node *left;
+    Node *right;
     int32_t op;
 };
 
@@ -369,18 +418,6 @@ private:
 // simple statements are meant to be the ones involving no operators, function calls, etc.
 // for instance, variables and constants are great examples of such expressions.
 
-bool isArithOp(const Token *tok) {
-    const auto token_type = tok->getType();
-    return token_type == Python3Lexer::ADD || token_type == Python3Lexer::MINUS;
-}
-
-bool isTermOp(const Token *tok) {
-    const auto token_type = tok->getType();
-    return token_type == Python3Lexer::STAR ||
-           token_type == Python3Lexer::DIV ||
-           token_type == Python3Lexer::IDIV ||
-           token_type == Python3Lexer::MOD;
-}
 
 // factor: ('+'|'-'|'~') factor | power;
 Node *parseFactor(PyLexer &lexer) {
@@ -395,6 +432,102 @@ Node *parseFactor(PyLexer &lexer) {
         default:
             return parsePower(lexer);
     }
+}
+
+Node *parseArgList(PyLexer& lexer) {
+    auto node = parseArgument(lexer);
+
+}
+
+
+Node *parseTest(PyLexer& lexer) {
+    auto node = parseOrTest(lexer);
+
+    if (lexer.curr->getType() == Python3Lexer::IF) {
+        lexer.consume(Python3Lexer::IF);
+        node = parseOrTest(lexer);
+        lexer.consume(Python3Lexer::ELSE);
+        node = parseTest(lexer);
+    } else if (lexer.curr->getType() == Python3Lexer::LAMBDA) {
+        node = parseLambDef(lexer);
+    }
+
+    return node;
+}
+
+Node *parseTypedArgsList(PyLexer& lexer) {
+
+}
+
+Node *parseExpr(PyLexer& lexer) {
+    auto node = parseXorExpr(lexer);
+
+    while (lexer.curr->getType() == Python3Lexer::OR_OP) {
+        lexer.consume(Python3Lexer::OR_OP);
+
+        const auto rhs = parseXorExpr(lexer);
+
+        node = new BinOp(node, rhs, Python3Lexer::OR_OP);
+    }
+
+    return node;
+}
+
+Node *parseXorExpr(PyLexer& lexer) {
+    auto node = parseAndExpr(lexer);
+
+    while (lexer.curr->getType() == Python3Lexer::XOR) {
+        lexer.consume(Python3Lexer::XOR);
+
+        const auto rhs = parseAndExpr(lexer);
+
+        node = new BinOp(node, rhs, Python3Lexer::XOR);
+    }
+
+    return node;
+}
+
+Node *parseAndExpr(PyLexer& lexer) {
+    auto node = parseShiftExpr(lexer);
+
+    while (lexer.curr->getType() == Python3Lexer::AND_OP) {
+        lexer.consume(Python3Lexer::AND_OP);
+
+        const auto rhs = parseShiftExpr(lexer);
+
+        node = new BinOp(node, rhs, Python3Lexer::AND_OP);
+    }
+
+    return node;
+}
+
+Node *parseShiftExpr(PyLexer& lexer) {
+    auto node = parseArithExpr(lexer);
+
+    while (lexer.curr->getType() == Python3Lexer::LEFT_SHIFT ||
+            lexer.curr->getType() == Python3Lexer::RIGHT_SHIFT) {
+        const auto current_token = lexer.curr;
+        lexer.consume(current_token->getType());
+
+        const auto rhs = parseArithExpr(lexer);
+        node = new BinOp(node, rhs, current_token->getType());
+    }
+
+    return node;
+}
+
+Node *parseComparison(PyLexer &lexer) {
+    auto node = parseExpr(lexer);
+
+    while (isCompOp(lexer.curr)) {
+        const auto current_token = lexer.curr;
+        lexer.consume(current_token->getType());
+
+        const auto rhs = parseExpr(lexer);
+        node = new Comparison(node, rhs, current_token->getType());
+    }
+
+    return node;
 }
 
 // power: atom_expr ('**' factor)?;
@@ -423,10 +556,12 @@ Node *parseAtomExpr(PyLexer &lexer) {
     }
 }
 
-Node* parseTrailer(PyLexer& lexer) {
+Node *parseTrailer(PyLexer &lexer) {
     const auto current_token = lexer.curr;
 
-    while (current_token->getType()) {
+    switch (current_token->getType()) {
+        case Python3Lexer::OPEN_PAREN:
+            lexer.consume(Python3Lexer::OPEN_PAREN);
 
     }
 }
@@ -483,7 +618,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseArithExpr(lexer);
+    return parseExpr(lexer);
 }
 
 
