@@ -55,7 +55,9 @@ struct Add;
 struct AssName;
 struct Discard;
 struct Const;
+struct Tfpdef;
 struct Argument;
+struct Arguments;
 struct Test;
 struct IfStmt;
 
@@ -73,9 +75,7 @@ Node *parseTerm(PyLexer &lexer);
 
 Node *parseArithExpr(PyLexer &lexer);
 
-Node *parseTfpDef(PyLexer &lexer);
-
-Node *parseTypedArgsList(PyLexer &lexer);
+Arguments *parseTypedArgsList(PyLexer &lexer);
 
 Node *parseComparison(PyLexer &lexer);
 
@@ -105,9 +105,49 @@ Node *parseNotTest(PyLexer &lexer);
 
 Node *parseArgList(PyLexer &lexer);
 
-Node *parseArgument(PyLexer &lexer);
+Argument *parseArgument(PyLexer &lexer);
 
 Node *parseParameters(PyLexer &lexer);
+
+FuncDef* parseFuncDef(PyLexer &lexer);
+
+std::string tokTypeToStr(const int32_t tok_type) {
+    switch (tok_type) {
+        case Python3Lexer::ADD:
+            return "TokAdd";
+        case Python3Lexer::MINUS:
+            return "TokMinus";
+        case Python3Lexer::STAR:
+            return "TokMult";
+        case Python3Lexer::DIV:
+            return "TokDiv";
+        case Python3Lexer::IDIV:
+            return "TokIntDiv";
+        case Python3Lexer::MOD:
+            return "TokMod";
+        case Python3Lexer::NUMBER:
+            return "TokNum";
+        case Python3Lexer::STRING:
+            return "TokStr";
+        case Python3Lexer::XOR:
+            return "TokXor";
+        case Python3Lexer::OR:
+            return "TokOr";
+        case Python3Lexer::AND:
+            return "TokAnd";
+        case Python3Lexer::OR_OP:
+            return "TokOrOp";
+        case Python3Lexer::AND_OP:
+            return "TokAndOp";
+        case Python3Lexer::NOT_OP:
+            return "TokNotOp";
+        case Python3Lexer::NOT:
+            return "TokNot";
+        default:
+            return "TokUnknown";
+    }
+}
+
 
 class PyLexer {
 public:
@@ -154,7 +194,8 @@ public:
             updateCurr(1);
         } else {
             // TODO(threadedstream): do cleanup
-            throw std::runtime_error("syntax error");
+            fprintf(stderr, "expected %s", tokTypeToStr(token_type));
+            exit(1);
         }
     }
 
@@ -213,42 +254,6 @@ bool isCompOp(PyLexer &lexer) {
            (token_type == Python3Lexer::IS && next_token_type == Python3Lexer::NOT);
 }
 
-std::string tokTypeToStr(const int32_t tok_type) {
-    switch (tok_type) {
-        case Python3Lexer::ADD:
-            return "TokAdd";
-        case Python3Lexer::MINUS:
-            return "TokMinus";
-        case Python3Lexer::STAR:
-            return "TokMult";
-        case Python3Lexer::DIV:
-            return "TokDiv";
-        case Python3Lexer::IDIV:
-            return "TokIntDiv";
-        case Python3Lexer::MOD:
-            return "TokMod";
-        case Python3Lexer::NUMBER:
-            return "TokNum";
-        case Python3Lexer::STRING:
-            return "TokStr";
-        case Python3Lexer::XOR:
-            return "TokXor";
-        case Python3Lexer::OR:
-            return "TokOr";
-        case Python3Lexer::AND:
-            return "TokAnd";
-        case Python3Lexer::OR_OP:
-            return "TokOrOp";
-        case Python3Lexer::AND_OP:
-            return "TokAndOp";
-        case Python3Lexer::NOT_OP:
-            return "TokNotOp";
-        case Python3Lexer::NOT:
-            return "TokNot";
-        default:
-            return "TokUnknown";
-    }
-}
 
 // AST nodes for P0 subset
 struct Node {
@@ -379,17 +384,28 @@ struct Const : public Node {
     int32_t type;
 };
 
-// is Argument node actually needed?
+struct Arguments : public Node {
+    explicit Arguments(const std::vector<Argument *> &args)
+            : args(args) {}
+
+
+    std::vector<Argument *> args;
+};
+
+
 struct Argument : public Node {
-    explicit Argument(Name *name)
-            : name(name) {}
+    explicit Argument(Name *name, Node *type, Node* default_val)
+            : name(name), type(type), default_val(default_val) {}
 
     virtual std::vector<Node *> getChildren() const override {
-        return {reinterpret_cast<Node *>(name)};
+        return {reinterpret_cast<Node *>(name), type, default_val};
     }
 
     Name *name;
+    Node *type;
+    Node *default_val;
 };
+
 
 struct Name : public Node {
     explicit Name(const std::string &name)
@@ -485,11 +501,11 @@ struct Comparison : public Node {
 };
 
 struct FuncDef : public Node {
-    explicit FuncDef(Name *name, std::vector<Node *> parameters, Node *body) :
+    explicit FuncDef(Name *name, Arguments* parameters, Node *body) :
             name(name), parameters(parameters), body(body) {};
 
     Name *name;
-    std::vector<Node *> parameters;
+    Arguments* parameters;
     Node *body;
 };
 
@@ -533,12 +549,16 @@ struct CallFunc : public Node {
 };
 
 
-// (tfpdef
-//      ( ASSIGN test )?
-//      (COMMA tfpdef (ASSIGN test)?)*
-//      (COMMA ( STAR (tfpdef)? (COMMA tfpdef (ASSIGN test)?)*
-Node *parseParameters(PyLexer &lexer) {
 
+Node *parseParameters(PyLexer &lexer) {
+    Arguments* parameters;
+    lexer.consume(Python3Lexer::OPEN_PAREN);
+    // if function takes some parameters
+    if (lexer.curr->getType() != Python3Lexer::CLOSE_PAREN) {
+        parameters = parseTypedArgsList(lexer);
+    }
+    lexer.consume(Python3Lexer::CLOSE_PAREN);
+    return parameters;
 }
 
 // factor: ('+'|'-'|'~') factor | power;
@@ -556,14 +576,64 @@ Node *parseFactor(PyLexer &lexer) {
     }
 }
 
-Node *parseArgList(PyLexer &lexer) {
-    auto node = parseArgument(lexer);
+// (tfpdef
+//      ( ASSIGN test )?
+//      ( COMMA tfpdef (ASSIGN test)? )*
+//      ( COMMA ( STAR (tfpdef)? (COMMA tfpdef (ASSIGN test)? )*
+//      ( COMMA (STAR (tfpdef)? (COMMA tfpdef (ASSIGN test)?)* (COMMA (POWER tfpdef (COMMA)? )?)? |
+//      POWER tfpdef (COMMA)?)?)? |
+//      STAR (tfpdef)? (COMMA tfpdef (ASSIGN test)?)* (COMMA (POWER tfpdef (COMMA)?)?)? |
+//      POWER tfpdef (COMMA)?
+// )
+Arguments *parseTypedArgsList(PyLexer &lexer) {
+    Arguments *arguments = new Arguments({});
+    auto argument = parseArgument(lexer);
 
-    return node;
+    if (lexer.curr->getType() == Python3Lexer::ASSIGN) {
+        lexer.consume(Python3Lexer::ASSIGN);
+        argument->default_val = parseTest(lexer);
+    }
+
+    arguments->args.push_back(argument);
+    // (',' tfpdef ('=' test)?)*
+    // able to parse parameters represented in the following way:
+    // (param, param1: type, param2: type = default)
+    while (lexer.curr->getType() == Python3Lexer::COMMA &&
+           lexer.next->getType() == Python3Lexer::NAME) {
+        lexer.consume(Python3Lexer::COMMA);
+        auto argument = parseArgument(lexer);
+        if (lexer.curr->getType() == Python3Lexer::ASSIGN) {
+            lexer.consume(Python3Lexer::ASSIGN);
+            argument->default_val = parseTest(lexer);
+        }
+        arguments->args.push_back(argument);
+    }
 }
 
-Node *parseArgument(PyLexer &lexer) {
+FuncDef *parseFuncDef(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::DEF);
+
+    const auto current_token = lexer.curr;
+    lexer.consume(Python3Lexer::NAME);
+
+    auto parameters = parseParameters;
+
+
+
     return nullptr;
+}
+
+Argument *parseArgument(PyLexer &lexer) {
+    const auto current_token = lexer.curr;
+    lexer.consume(Python3Lexer::Python3Lexer::NAME);
+
+    auto node = new Argument(new Name(current_token->getText()), nullptr, nullptr);
+    if (lexer.curr->getType() == Python3Lexer::COLON) {
+        lexer.consume(Python3Lexer::COLON);
+        node->type = parseTest(lexer);
+    }
+
+    return node;
 }
 
 Node *parseOrTest(PyLexer &lexer) {
@@ -599,7 +669,8 @@ Node *parseNotTest(PyLexer &lexer) {
             lexer.consume(Python3Lexer::NOT);
             const auto expr = parseNotTest(lexer);
             node = new UnaryOp(Python3Lexer::NOT, expr);
-        } break;
+        }
+            break;
         default:
             node = parseComparison(lexer);
     }
@@ -630,10 +701,6 @@ Node *parseTest(PyLexer &lexer) {
     }
 
     return node;
-}
-
-Node *parseTypedArgsList(PyLexer &lexer) {
-    return nullptr;
 }
 
 Node *parseExpr(PyLexer &lexer) {
@@ -725,7 +792,7 @@ Node *parseAtomExpr(PyLexer &lexer) {
     return parseAtom(lexer);
 }
 
-Node *parseAtom(PyLexer& lexer) {
+Node *parseAtom(PyLexer &lexer) {
     const auto current_token = lexer.curr;
     switch (current_token->getType()) {
         // only numbers for now
