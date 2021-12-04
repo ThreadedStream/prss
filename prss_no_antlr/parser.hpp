@@ -5,31 +5,15 @@
 #include <stack>
 #include <optional>
 #include <any>
+#include <sstream>
+#include <map>
 
 #include <numeric>
 #include "antlr4-runtime.h"
 #include "Python3Lexer.h"
 
 
-#define ADD_OPERANDS_CASE(target, parent, token) \
-    case Python3Lexer::NUMBER: \
-        (target) = visitConst(token, parent); \
-        break;\
-    default:                                     \
-        const auto next_next_tok = lexer.lookAhead(2);                                         \
-        if (token->getType() == Python3Lexer::NAME &&                                     \
-        next_next_tok &&                              \
-        next_next_tok->getType() == Python3Lexer::OPEN_PAREN) {                                \
-            lexer.updateCurr(1);                                     \
-            (target) = visitCallFunc(lexer, parent);                                         \
-        }                                          \
 
-
-//    case Python3Lexer::CLOSE_PAREN: \
-//        (target) = visitCallFunc(lexer, parent); \
-
-
-static int32_t ssa_num = 0;
 
 template<typename T>
 using opt = std::optional<T>;
@@ -107,47 +91,112 @@ Node *parseArgList(PyLexer &lexer);
 
 Argument *parseArgument(PyLexer &lexer);
 
-Node *parseParameters(PyLexer &lexer);
+Arguments *parseParameters(PyLexer &lexer);
 
-FuncDef* parseFuncDef(PyLexer &lexer);
+FuncDef *parseFuncDef(PyLexer &lexer);
 
-std::string tokTypeToStr(const int32_t tok_type) {
-    switch (tok_type) {
-        case Python3Lexer::ADD:
-            return "TokAdd";
-        case Python3Lexer::MINUS:
-            return "TokMinus";
-        case Python3Lexer::STAR:
-            return "TokMult";
-        case Python3Lexer::DIV:
-            return "TokDiv";
-        case Python3Lexer::IDIV:
-            return "TokIntDiv";
-        case Python3Lexer::MOD:
-            return "TokMod";
-        case Python3Lexer::NUMBER:
-            return "TokNum";
-        case Python3Lexer::STRING:
-            return "TokStr";
-        case Python3Lexer::XOR:
-            return "TokXor";
-        case Python3Lexer::OR:
-            return "TokOr";
-        case Python3Lexer::AND:
-            return "TokAnd";
-        case Python3Lexer::OR_OP:
-            return "TokOrOp";
-        case Python3Lexer::AND_OP:
-            return "TokAndOp";
-        case Python3Lexer::NOT_OP:
-            return "TokNotOp";
-        case Python3Lexer::NOT:
-            return "TokNot";
-        default:
-            return "TokUnknown";
-    }
-}
+Node *parseSuite(PyLexer &lexer);
 
+
+std::map<int32_t, std::string> tokTypeToStr = {
+        {Python3Lexer::STRING, "TokString"},
+        {Python3Lexer::NUMBER, "TokNumber"},
+        {Python3Lexer::INTEGER, "TokInteger"},
+        {Python3Lexer::DEF, "TokDef"},
+        {Python3Lexer::RETURN, "TokReturn"},
+        {Python3Lexer::RAISE, "TokRaise"},
+        {Python3Lexer::FROM, "TokFrom"},
+        {Python3Lexer::IMPORT, "TokImport"},
+        {Python3Lexer::AS, "TokAs"},
+        {Python3Lexer::GLOBAL, "TokGlobal"},
+        {Python3Lexer::NONLOCAL, "TokNonlocal"},
+        {Python3Lexer::ASSERT, "TokAssert"},
+        {Python3Lexer::IF, "TokIf"},
+        {Python3Lexer::ELIF,  "TokElif"},
+        {Python3Lexer::ELSE, "TokElse"},
+        {Python3Lexer::WHILE, "TokWhile"},
+        {Python3Lexer::FOR, "TokFor"},
+        {Python3Lexer::IN, "TokIn"},
+        {Python3Lexer::TRY, "TokTry"},
+        {Python3Lexer::FINALLY, "TokFinally"},
+        {Python3Lexer::WITH, "TokWith"},
+        {Python3Lexer::EXCEPT, "TokExcept"},
+        {Python3Lexer::LAMBDA, "TokLambda"},
+        {Python3Lexer::OR, "TokOr"},
+        {Python3Lexer::AND, "TokAnd"},
+        {Python3Lexer::NOT, "TokNot"},
+        {Python3Lexer::IS, "TokIs"},
+        {Python3Lexer::NONE, "TokNone"},
+        {Python3Lexer::TRUE, "TokTrue"},
+        {Python3Lexer::FALSE, "TokFalse"},
+        {Python3Lexer::CLASS, "TokClass"},
+        {Python3Lexer::YIELD, "TokYield"},
+        {Python3Lexer::DEL, "TokDel"},
+        {Python3Lexer::PASS, "TokPass"},
+        {Python3Lexer::CONTINUE, "TokContinue"},
+        {Python3Lexer::BREAK, "TokBreak"},
+        {Python3Lexer::ASYNC, "TokAsync"},
+        {Python3Lexer::AWAIT, "TokAwait"},
+        {Python3Lexer::NEWLINE, "TokNewline"},
+        {Python3Lexer::NAME, "TokName"},
+        {Python3Lexer::STRING_LITERAL, "TokStringLiteral"},
+        {Python3Lexer::BYTES_LITERAL, "TokBytesLiteral"},
+        {Python3Lexer::DECIMAL_INTEGER, "TokDecimalInteger"},
+        {Python3Lexer::OCT_INTEGER, "TokOctInteger"},
+        {Python3Lexer::HEX_INTEGER, "TokHexInteger"},
+        {Python3Lexer::BIN_INTEGER, "TokBigInteger"},
+        {Python3Lexer::FLOAT_NUMBER, "TokFloatNumber"},
+        {Python3Lexer::IMAG_NUMBER, "TokImagNumber"},
+        {Python3Lexer::DOT, "TokDot"},
+        {Python3Lexer::ELLIPSIS, "TokEllipsis"},
+        {Python3Lexer::STAR, "TokStar"},
+        {Python3Lexer::OPEN_PAREN, "TokOpenParen"},
+        {Python3Lexer::CLOSE_PAREN, "TokCloseParen"},
+        {Python3Lexer::COMMA, "TokComma"},
+        {Python3Lexer::COLON, "TokColon"},
+        {Python3Lexer::SEMI_COLON, "TokSemiColon"},
+        {Python3Lexer::POWER, "TokPower"},
+        {Python3Lexer::ASSIGN, "TokAssign"},
+        {Python3Lexer::OPEN_BRACK, "TokOpenBrack"},
+        {Python3Lexer::CLOSE_BRACK, "TokCloseBrack"},
+        {Python3Lexer::OR_OP, "TokOrOp"},
+        {Python3Lexer::XOR, "TokXor"},
+        {Python3Lexer::AND_OP, "TokAndOp"},
+        {Python3Lexer::LEFT_SHIFT, "TokLeftShift"},
+        {Python3Lexer::RIGHT_SHIFT, "TokRightShift"},
+        {Python3Lexer::ADD, "TokAdd"},
+        {Python3Lexer::MINUS, "TokMinus"},
+        {Python3Lexer::DIV, "TokDiv"},
+        {Python3Lexer::MOD, "TokMod"},
+        {Python3Lexer::IDIV, "TokIdiv"},
+        {Python3Lexer::NOT_OP, "TokNotOp"},
+        {Python3Lexer::OPEN_BRACE, "TokOpenBrace"},
+        {Python3Lexer::CLOSE_BRACE, "TokCloseBrace"},
+        {Python3Lexer::LESS_THAN, "TokLessThan"},
+        {Python3Lexer::GREATER_THAN, "TokGreaterThan"},
+        {Python3Lexer::EQUALS, "TokEquals"},
+        {Python3Lexer::GT_EQ, "TokGtEq"},
+        {Python3Lexer::LT_EQ, "TokLtEq"},
+        {Python3Lexer::NOT_EQ_1,  "TokNotEq1"},
+        {Python3Lexer::NOT_EQ_2, "TokNotEq2"},
+        {Python3Lexer::AT, "TokAt"},
+        {Python3Lexer::ARROW, "TokArrow"},
+        {Python3Lexer::ADD_ASSIGN, "TokAddAssign"},
+        {Python3Lexer::SUB_ASSIGN, "TokSubAssign"},
+        {Python3Lexer::MULT_ASSIGN, "TokMultAssign"},
+        {Python3Lexer::AT_ASSIGN, "TokAtAssign"},
+        {Python3Lexer::DIV_ASSIGN, "TokDivAssign"},
+        {Python3Lexer::MOD_ASSIGN, "TokModAssign"},
+        {Python3Lexer::AND_ASSIGN, "TokAndAssign"},
+        {Python3Lexer::OR_ASSIGN, "TokOrAssign"},
+        {Python3Lexer::XOR_ASSIGN, "TokXorAssign"},
+        {Python3Lexer::LEFT_SHIFT_ASSIGN, "TokLeftShiftAssign"},
+        {Python3Lexer::RIGHT_SHIFT_ASSIGN, "TokRightShiftAssign"},
+        {Python3Lexer::POWER_ASSIGN, "TokPowerAssign"},
+        {Python3Lexer::IDIV_ASSIGN, "TokIDivAssign"},
+        {Python3Lexer::SKIP_, "TokSkip"},
+        {Python3Lexer::UNKNOWN_CHAR, "TokUnknownChar"}
+};
 
 class PyLexer {
 public:
@@ -190,11 +239,11 @@ public:
     }
 
     void consume(int32_t token_type) {
-        if (curr->getType() == token_type) {
+        if (curr->getType() == static_cast<size_t>(token_type)) {
             updateCurr(1);
         } else {
             // TODO(threadedstream): do cleanup
-            fprintf(stderr, "expected %s", tokTypeToStr(token_type));
+            fprintf(stderr, "expected %s", tokTypeToStr[token_type].c_str());
             exit(1);
         }
     }
@@ -273,45 +322,39 @@ struct Node {
 };
 
 struct Module : public Node {
-    Module(const std::string &doc, Node *expr) : expr_(expr), doc_(doc) {}
+    Module(const std::string &doc, Node *expr) : expr(expr), doc(doc) {}
 
     std::string str() const noexcept override {
-        const std::string valid_doc_fmt = doc_ != "" ? doc_ : "None";
-        return "Module(" + valid_doc_fmt + ", " + expr_->str() + ")";
+        std::ostringstream module_str;
+        module_str << "Module(doc=" << (doc != "" ? doc : "None") << ",expr=" << expr->str() << ")";
+        return module_str.str();
     }
 
-    virtual void addChild(Node *n, const bool) noexcept override {
-        expr_ = n;
-    }
-
-    Node *expr_;
-    std::string doc_;
+    Node *expr;
+    std::string doc;
 };
 
 struct Stmt : public Node {
-    explicit Stmt(const std::vector<Node *> &nodes) : nodes_(nodes) {
-    }
+    explicit Stmt(const std::vector<Node *> &nodes)
+            : nodes(nodes) {}
 
     std::string str() const noexcept override {
-        std::string stmt_str = "Stmt([";
-        for (const auto &node: nodes_) {
-            stmt_str += node->str();
+        std::ostringstream stmt_str;
+        stmt_str << "Stmt([";
+        for (const auto &node: nodes) {
+            stmt_str << node->str();
         }
 
-        stmt_str += "])";
+        stmt_str << "])";
 
-        return stmt_str;
-    }
-
-    virtual void addChild(Node *n, const bool) noexcept override {
-        nodes_.push_back(n);
+        return stmt_str.str();
     }
 
     std::vector<Node *> getChildren() const {
-        return nodes_;
+        return nodes;
     }
 
-    std::vector<Node *> nodes_;
+    std::vector<Node *> nodes;
 };
 
 struct Test : public Node {
@@ -324,11 +367,9 @@ struct IfStmt : public Node {
             : test(test), body(body), else_body(else_body) {}
 
     virtual std::string str() const noexcept override {
-        const auto if_str = "IfStmt(test = " + test->str() +
-                            ", body = " + body->str() +
-                            ", else_body = " + else_body->str() + ")";
-
-        return if_str;
+        std::ostringstream if_str;
+        if_str << "IfStmt(test=" << test->str() << ",body=" << body->str() << ",else_body=" << else_body->str() << ")";
+        return if_str.str();
     }
 
     virtual std::vector<Node *> getChildren() const override {
@@ -350,20 +391,16 @@ struct Assign : public Node {
 
 struct AssName : public Node {
     explicit AssName(const std::string &name, AssignFlag flags)
-            : name_(name), flags_(flags) {}
+            : name(name), flags(flags) {}
 
-    std::string name_;
-    AssignFlag flags_;
+    std::string name;
+    AssignFlag flags;
 };
 
 // TODO(threadedstream): What meaning does Discard possess?
 struct Discard : public Node {
     explicit Discard(Node *expr)
             : expr(expr) {}
-
-    virtual void addChild(Node *n) noexcept {
-        expr = n;
-    }
 
     Node *expr;
 };
@@ -373,7 +410,11 @@ struct Const : public Node {
             : value(value), type(type) {}
 
     std::string str() const noexcept override {
-        return "Const(value = " + value + ", type = " + tokTypeToStr(type) + ")";
+        std::ostringstream const_str;
+
+        const_str << "Const(value=" << value << ",type=" << tokTypeToStr[type];
+
+        return const_str.str();
     }
 
     virtual std::vector<Node *> getChildren() const override {
@@ -392,21 +433,6 @@ struct Arguments : public Node {
     std::vector<Argument *> args;
 };
 
-
-struct Argument : public Node {
-    explicit Argument(Name *name, Node *type, Node* default_val)
-            : name(name), type(type), default_val(default_val) {}
-
-    virtual std::vector<Node *> getChildren() const override {
-        return {reinterpret_cast<Node *>(name), type, default_val};
-    }
-
-    Name *name;
-    Node *type;
-    Node *default_val;
-};
-
-
 struct Name : public Node {
     explicit Name(const std::string &name)
             : name(name) {}
@@ -422,15 +448,37 @@ struct Name : public Node {
     std::string name;
 };
 
+
+struct Argument : public Node {
+    explicit Argument(Name *name, Node *type, Node *default_val)
+            : name(name), type(type), default_val(default_val) {}
+
+    std::string str() const noexcept override {
+        std::ostringstream arg_str;
+
+        arg_str << "Argument(name=" << name->str() << ",type=" << type->str() << ",default_val=" << default_val->str()
+                << ")";
+
+        return arg_str.str();
+    }
+
+    virtual std::vector<Node *> getChildren() const override {
+        return {name, type, default_val};
+    }
+
+    Name *name;
+    Node *type;
+    Node *default_val;
+};
+
+
 struct BinOp : public Node {
     explicit BinOp(Node *left, Node *right, int32_t op) : left(left), right(right), op(op) {}
 
     std::string str() const noexcept override {
-        const auto bin_op_str = "BinOp(left = " + left->str() +
-                                ",right = " + right->str() +
-                                ",op = " + tokTypeToStr(op) + ")";
-
-        return bin_op_str;
+        std::ostringstream bin_op_str;
+        bin_op_str << "BinOp(left=" << left->str() << ",right=" << right->str() << ",op=" << tokTypeToStr[op] << ")";
+        return bin_op_str.str();
     }
 
     virtual std::vector<Node *> getChildren() const override {
@@ -444,21 +492,20 @@ struct BinOp : public Node {
 
 struct UnaryOp : public Node {
     explicit UnaryOp(const int32_t op, Node *expr)
-            : op(op), expr(expr) {}
+            :  expr(expr), op(op) {}
 
     std::string str() const noexcept override {
-        const auto unary_op_str = "UnaryOp(expr = " + expr->str() +
-                                  ", op = " + tokTypeToStr(op) + ")";
-
-        return unary_op_str;
+        std::ostringstream unary_op_str;
+        unary_op_str << "UnaryOp(expr=" << expr->str() << ",op=" << tokTypeToStr[op] << ")";
+        return unary_op_str.str();
     }
 
     virtual std::vector<Node *> getChildren() const override {
         return {expr};
     }
 
-    int32_t op;
     Node *expr;
+    int32_t op;
 };
 
 struct BoolOp : public Node {
@@ -467,11 +514,10 @@ struct BoolOp : public Node {
 
 
     virtual std::string str() const noexcept override {
-        const auto bool_op_str = "BoolOp(left = " + left->str() +
-                                 ",right = " + right->str() +
-                                 ",op = " + tokTypeToStr(op) + ")";
-
-        return bool_op_str;
+        std::ostringstream bool_op_str;
+        bool_op_str << "BoolOp(left = " << left->str() << ",right=" << right->str() << ",op=" << tokTypeToStr[op]
+                    << ")";
+        return bool_op_str.str();
     }
 
     virtual std::vector<Node *> getChildren() const override {
@@ -488,11 +534,10 @@ struct Comparison : public Node {
             : left(left), right(right), op(op) {}
 
     std::string str() const noexcept override {
-        std::string comparison_str = "Comparison(left = " + left->str() +
-                                     ",right = " + right->str() +
-                                     ",op = " + tokTypeToStr(op);
-
-        return comparison_str;
+        std::ostringstream comparison_str;
+        comparison_str << "Comparison(left=" << left->str() << ",right=" << right->str() << ",op=" << tokTypeToStr[op]
+                       << ")";
+        return comparison_str.str();
     }
 
     Node *left;
@@ -501,57 +546,56 @@ struct Comparison : public Node {
 };
 
 struct FuncDef : public Node {
-    explicit FuncDef(Name *name, Arguments* parameters, Node *body) :
-            name(name), parameters(parameters), body(body) {};
+    explicit FuncDef(Name *name, Arguments *parameters, Node *body, Node *return_type) :
+            name(name), parameters(parameters), body(body), return_type(return_type) {};
+
+    std::string str() const noexcept override {
+        std::ostringstream func_def_str;
+        func_def_str << "FuncDef(name=" << name->str() << ",arguments="
+                    << parameters->str() << ",body=" << body->str()
+                     << ",return_type=" << return_type->str();
+
+        return func_def_str.str();
+    }
 
     Name *name;
-    Arguments* parameters;
+    Arguments *parameters;
     Node *body;
+    Node *return_type;
 };
 
 struct CallFunc : public Node {
-    explicit CallFunc(Name *name, const std::vector<Node *> &args)
-            : name(name), args(args) {}
+    explicit CallFunc(Name *name, Arguments *arguments)
+            : name(name), arguments(arguments) {}
 
     std::string str() const noexcept override {
-        const std::string valid_args_fmt = args.size() == 0 ? "[]" : ([&]() -> std::string {
+        const std::string arguments_str = arguments->args.size() == 0 ? "[]" : ([&]() -> std::string {
             std::string arg_nodes_str;
-            for (const auto &arg: args) {
+            for (const auto &arg: arguments->args) {
                 arg_nodes_str += arg->str();
             }
 
             return arg_nodes_str;
         })();
 
-        const auto call_func_str = "CallFunc(name = " + name->str() +
-                                   ", args = " + valid_args_fmt + ")";
+        std::ostringstream call_func_str;
+        call_func_str << "CallFunc(name=" << name->str() << ",arguments=" << arguments_str << ")";
 
-        return call_func_str;
+        return call_func_str.str();
     }
 
-    virtual void addChild(Node *n, const bool next_arg = false) noexcept override {
-        if (args.empty()) {
-            args.push_back(n);
-            return;
-        }
-
-        if (!next_arg) {
-            args[curr_arg_num] = n;
-        } else {
-            args.push_back(n);
-            curr_arg_num++;
-        }
+    std::vector<Node *> getChildren() const override {
+        return {name, arguments};
     }
 
     Name *name;
-    std::vector<Node *> args;
+    Arguments *arguments;
     int32_t curr_arg_num = 0;
 };
 
 
-
-Node *parseParameters(PyLexer &lexer) {
-    Arguments* parameters;
+Arguments *parseParameters(PyLexer &lexer) {
+    Arguments *parameters;
     lexer.consume(Python3Lexer::OPEN_PAREN);
     // if function takes some parameters
     if (lexer.curr->getType() != Python3Lexer::CLOSE_PAREN) {
@@ -608,6 +652,8 @@ Arguments *parseTypedArgsList(PyLexer &lexer) {
         }
         arguments->args.push_back(argument);
     }
+
+    return arguments;
 }
 
 FuncDef *parseFuncDef(PyLexer &lexer) {
@@ -615,11 +661,24 @@ FuncDef *parseFuncDef(PyLexer &lexer) {
 
     const auto current_token = lexer.curr;
     lexer.consume(Python3Lexer::NAME);
+    auto func_def = new FuncDef(new Name(current_token->getText()), nullptr, nullptr, nullptr);
 
-    auto parameters = parseParameters;
+    auto parameters = parseParameters(lexer);
+    func_def->parameters = parameters;
 
+    if (lexer.curr->getType() == Python3Lexer::ARROW) {
+        lexer.consume(Python3Lexer::ARROW);
+        func_def->return_type = parseTest(lexer);
+    }
 
+    lexer.consume(Python3Lexer::COLON);
 
+    func_def->body = parseSuite(lexer);
+
+    return func_def;
+}
+
+Node *parseSuite(PyLexer& lexer) {
     return nullptr;
 }
 
@@ -693,8 +752,7 @@ Node *parseTest(PyLexer &lexer) {
             lexer.consume(Python3Lexer::ELSE);
             const auto else_body = parseTest(lexer);
             node = new IfStmt(if_test, node, else_body);
-        }
-            break;
+        }break;
         case Python3Lexer::LAMBDA:
             node = parseLambDef(lexer);
             break;
@@ -873,7 +931,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseTest(lexer);
+    return parseFuncDef(lexer);
 }
 
 void destroyAst(Node *root) {
