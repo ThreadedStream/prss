@@ -27,6 +27,7 @@ enum class AssignFlag : uint8_t {
 struct Node;
 struct Module;
 struct CallFunc;
+struct SimpleStmt;
 struct FuncDef;
 struct BinOp;
 struct UnaryOp;
@@ -35,7 +36,10 @@ struct Name;
 struct Assign;
 struct StarredExpr;
 struct Pass;
+struct Yield;
+struct YieldFrom;
 struct ExprList;
+struct Raise;
 struct Add;
 struct Break;
 struct Continue;
@@ -110,6 +114,14 @@ Node *parseStmt(PyLexer &lexer);
 
 Node *parseSimpleStmt(PyLexer &lexer);
 
+Raise *parseRaiseStmt(PyLexer &lexer);
+
+Node *parseYieldStmt(PyLexer &lexer);
+
+Node *parseYieldExpr(PyLexer &lexer);
+
+Node *parseYieldArg(PyLexer &lexer);
+
 Node *parseExprStmt(PyLexer &lexer);
 
 Delete *parseDelStmt(PyLexer &lexer);
@@ -138,105 +150,113 @@ TestList *parseTestlist(PyLexer &lexer);
 
 Node *parseTestlistStarExpr(PyLexer &lexer);
 
-std::map<int32_t, std::string> tokTypeToStr = {
-        {Python3Lexer::STRING,             "TokString"},
-        {Python3Lexer::NUMBER,             "TokNumber"},
-        {Python3Lexer::INTEGER,            "TokInteger"},
-        {Python3Lexer::DEF,                "TokDef"},
-        {Python3Lexer::RETURN,             "TokReturn"},
-        {Python3Lexer::RAISE,              "TokRaise"},
-        {Python3Lexer::FROM,               "TokFrom"},
-        {Python3Lexer::IMPORT,             "TokImport"},
-        {Python3Lexer::AS,                 "TokAs"},
-        {Python3Lexer::GLOBAL,             "TokGlobal"},
-        {Python3Lexer::NONLOCAL,           "TokNonlocal"},
-        {Python3Lexer::ASSERT,             "TokAssert"},
-        {Python3Lexer::IF,                 "TokIf"},
-        {Python3Lexer::ELIF,               "TokElif"},
-        {Python3Lexer::ELSE,               "TokElse"},
-        {Python3Lexer::WHILE,              "TokWhile"},
-        {Python3Lexer::FOR,                "TokFor"},
-        {Python3Lexer::IN,                 "TokIn"},
-        {Python3Lexer::TRY,                "TokTry"},
-        {Python3Lexer::FINALLY,            "TokFinally"},
-        {Python3Lexer::WITH,               "TokWith"},
-        {Python3Lexer::EXCEPT,             "TokExcept"},
-        {Python3Lexer::LAMBDA,             "TokLambda"},
-        {Python3Lexer::OR,                 "TokOr"},
-        {Python3Lexer::AND,                "TokAnd"},
-        {Python3Lexer::NOT,                "TokNot"},
-        {Python3Lexer::IS,                 "TokIs"},
-        {Python3Lexer::NONE,               "TokNone"},
-        {Python3Lexer::TRUE,               "TokTrue"},
-        {Python3Lexer::FALSE,              "TokFalse"},
-        {Python3Lexer::CLASS,              "TokClass"},
-        {Python3Lexer::YIELD,              "TokYield"},
-        {Python3Lexer::DEL,                "TokDel"},
-        {Python3Lexer::PASS,               "TokPass"},
-        {Python3Lexer::CONTINUE,           "TokContinue"},
-        {Python3Lexer::BREAK,              "TokBreak"},
-        {Python3Lexer::ASYNC,              "TokAsync"},
-        {Python3Lexer::AWAIT,              "TokAwait"},
-        {Python3Lexer::NEWLINE,            "TokNewline"},
-        {Python3Lexer::NAME,               "TokName"},
-        {Python3Lexer::STRING_LITERAL,     "TokStringLiteral"},
-        {Python3Lexer::BYTES_LITERAL,      "TokBytesLiteral"},
-        {Python3Lexer::DECIMAL_INTEGER,    "TokDecimalInteger"},
-        {Python3Lexer::OCT_INTEGER,        "TokOctInteger"},
-        {Python3Lexer::HEX_INTEGER,        "TokHexInteger"},
-        {Python3Lexer::BIN_INTEGER,        "TokBigInteger"},
-        {Python3Lexer::FLOAT_NUMBER,       "TokFloatNumber"},
-        {Python3Lexer::IMAG_NUMBER,        "TokImagNumber"},
-        {Python3Lexer::DOT,                "TokDot"},
-        {Python3Lexer::ELLIPSIS,           "TokEllipsis"},
-        {Python3Lexer::STAR,               "TokStar"},
-        {Python3Lexer::OPEN_PAREN,         "TokOpenParen"},
-        {Python3Lexer::CLOSE_PAREN,        "TokCloseParen"},
-        {Python3Lexer::COMMA,              "TokComma"},
-        {Python3Lexer::COLON,              "TokColon"},
-        {Python3Lexer::SEMI_COLON,         "TokSemiColon"},
-        {Python3Lexer::POWER,              "TokPower"},
-        {Python3Lexer::ASSIGN,             "TokAssign"},
-        {Python3Lexer::OPEN_BRACK,         "TokOpenBrack"},
-        {Python3Lexer::CLOSE_BRACK,        "TokCloseBrack"},
-        {Python3Lexer::OR_OP,              "TokOrOp"},
-        {Python3Lexer::XOR,                "TokXor"},
-        {Python3Lexer::AND_OP,             "TokAndOp"},
-        {Python3Lexer::LEFT_SHIFT,         "TokLeftShift"},
-        {Python3Lexer::RIGHT_SHIFT,        "TokRightShift"},
-        {Python3Lexer::ADD,                "TokAdd"},
-        {Python3Lexer::MINUS,              "TokMinus"},
-        {Python3Lexer::DIV,                "TokDiv"},
-        {Python3Lexer::MOD,                "TokMod"},
-        {Python3Lexer::IDIV,               "TokIdiv"},
-        {Python3Lexer::NOT_OP,             "TokNotOp"},
-        {Python3Lexer::OPEN_BRACE,         "TokOpenBrace"},
-        {Python3Lexer::CLOSE_BRACE,        "TokCloseBrace"},
-        {Python3Lexer::LESS_THAN,          "TokLessThan"},
-        {Python3Lexer::GREATER_THAN,       "TokGreaterThan"},
-        {Python3Lexer::EQUALS,             "TokEquals"},
-        {Python3Lexer::GT_EQ,              "TokGtEq"},
-        {Python3Lexer::LT_EQ,              "TokLtEq"},
-        {Python3Lexer::NOT_EQ_1,           "TokNotEq1"},
-        {Python3Lexer::NOT_EQ_2,           "TokNotEq2"},
-        {Python3Lexer::AT,                 "TokAt"},
-        {Python3Lexer::ARROW,              "TokArrow"},
-        {Python3Lexer::ADD_ASSIGN,         "TokAddAssign"},
-        {Python3Lexer::SUB_ASSIGN,         "TokSubAssign"},
-        {Python3Lexer::MULT_ASSIGN,        "TokMultAssign"},
-        {Python3Lexer::AT_ASSIGN,          "TokAtAssign"},
-        {Python3Lexer::DIV_ASSIGN,         "TokDivAssign"},
-        {Python3Lexer::MOD_ASSIGN,         "TokModAssign"},
-        {Python3Lexer::AND_ASSIGN,         "TokAndAssign"},
-        {Python3Lexer::OR_ASSIGN,          "TokOrAssign"},
-        {Python3Lexer::XOR_ASSIGN,         "TokXorAssign"},
-        {Python3Lexer::LEFT_SHIFT_ASSIGN,  "TokLeftShiftAssign"},
-        {Python3Lexer::RIGHT_SHIFT_ASSIGN, "TokRightShiftAssign"},
-        {Python3Lexer::POWER_ASSIGN,       "TokPowerAssign"},
-        {Python3Lexer::IDIV_ASSIGN,        "TokIDivAssign"},
-        {Python3Lexer::SKIP_,              "TokSkip"},
-        {Python3Lexer::UNKNOWN_CHAR,       "TokUnknownChar"}
-};
+Node *buildAst(PyLexer &lexer);
+
+void destroyAst(Node *root);
+
+namespace tok_utils {
+    static std::map<int32_t, std::string> tokTypeToStr = {
+            {Python3Lexer::STRING,             "TokString"},
+            {Python3Lexer::NUMBER,             "TokNumber"},
+            {Python3Lexer::INTEGER,            "TokInteger"},
+            {Python3Lexer::DEF,                "TokDef"},
+            {Python3Lexer::RETURN,             "TokReturn"},
+            {Python3Lexer::RAISE,              "TokRaise"},
+            {Python3Lexer::FROM,               "TokFrom"},
+            {Python3Lexer::IMPORT,             "TokImport"},
+            {Python3Lexer::AS,                 "TokAs"},
+            {Python3Lexer::GLOBAL,             "TokGlobal"},
+            {Python3Lexer::NONLOCAL,           "TokNonlocal"},
+            {Python3Lexer::ASSERT,             "TokAssert"},
+            {Python3Lexer::IF,                 "TokIf"},
+            {Python3Lexer::ELIF,               "TokElif"},
+            {Python3Lexer::ELSE,               "TokElse"},
+            {Python3Lexer::WHILE,              "TokWhile"},
+            {Python3Lexer::FOR,                "TokFor"},
+            {Python3Lexer::IN,                 "TokIn"},
+            {Python3Lexer::TRY,                "TokTry"},
+            {Python3Lexer::FINALLY,            "TokFinally"},
+            {Python3Lexer::WITH,               "TokWith"},
+            {Python3Lexer::EXCEPT,             "TokExcept"},
+            {Python3Lexer::LAMBDA,             "TokLambda"},
+            {Python3Lexer::OR,                 "TokOr"},
+            {Python3Lexer::AND,                "TokAnd"},
+            {Python3Lexer::NOT,                "TokNot"},
+            {Python3Lexer::IS,                 "TokIs"},
+            {Python3Lexer::NONE,               "TokNone"},
+            {Python3Lexer::TRUE,               "TokTrue"},
+            {Python3Lexer::FALSE,              "TokFalse"},
+            {Python3Lexer::CLASS,              "TokClass"},
+            {Python3Lexer::YIELD,              "TokYield"},
+            {Python3Lexer::DEL,                "TokDel"},
+            {Python3Lexer::PASS,               "TokPass"},
+            {Python3Lexer::CONTINUE,           "TokContinue"},
+            {Python3Lexer::BREAK,              "TokBreak"},
+            {Python3Lexer::ASYNC,              "TokAsync"},
+            {Python3Lexer::AWAIT,              "TokAwait"},
+            {Python3Lexer::NEWLINE,            "TokNewline"},
+            {Python3Lexer::NAME,               "TokName"},
+            {Python3Lexer::STRING_LITERAL,     "TokStringLiteral"},
+            {Python3Lexer::BYTES_LITERAL,      "TokBytesLiteral"},
+            {Python3Lexer::DECIMAL_INTEGER,    "TokDecimalInteger"},
+            {Python3Lexer::OCT_INTEGER,        "TokOctInteger"},
+            {Python3Lexer::HEX_INTEGER,        "TokHexInteger"},
+            {Python3Lexer::BIN_INTEGER,        "TokBigInteger"},
+            {Python3Lexer::FLOAT_NUMBER,       "TokFloatNumber"},
+            {Python3Lexer::IMAG_NUMBER,        "TokImagNumber"},
+            {Python3Lexer::DOT,                "TokDot"},
+            {Python3Lexer::ELLIPSIS,           "TokEllipsis"},
+            {Python3Lexer::STAR,               "TokStar"},
+            {Python3Lexer::OPEN_PAREN,         "TokOpenParen"},
+            {Python3Lexer::CLOSE_PAREN,        "TokCloseParen"},
+            {Python3Lexer::COMMA,              "TokComma"},
+            {Python3Lexer::COLON,              "TokColon"},
+            {Python3Lexer::SEMI_COLON,         "TokSemiColon"},
+            {Python3Lexer::POWER,              "TokPower"},
+            {Python3Lexer::ASSIGN,             "TokAssign"},
+            {Python3Lexer::OPEN_BRACK,         "TokOpenBrack"},
+            {Python3Lexer::CLOSE_BRACK,        "TokCloseBrack"},
+            {Python3Lexer::OR_OP,              "TokOrOp"},
+            {Python3Lexer::XOR,                "TokXor"},
+            {Python3Lexer::AND_OP,             "TokAndOp"},
+            {Python3Lexer::LEFT_SHIFT,         "TokLeftShift"},
+            {Python3Lexer::RIGHT_SHIFT,        "TokRightShift"},
+            {Python3Lexer::ADD,                "TokAdd"},
+            {Python3Lexer::MINUS,              "TokMinus"},
+            {Python3Lexer::DIV,                "TokDiv"},
+            {Python3Lexer::MOD,                "TokMod"},
+            {Python3Lexer::IDIV,               "TokIdiv"},
+            {Python3Lexer::NOT_OP,             "TokNotOp"},
+            {Python3Lexer::OPEN_BRACE,         "TokOpenBrace"},
+            {Python3Lexer::CLOSE_BRACE,        "TokCloseBrace"},
+            {Python3Lexer::LESS_THAN,          "TokLessThan"},
+            {Python3Lexer::GREATER_THAN,       "TokGreaterThan"},
+            {Python3Lexer::EQUALS,             "TokEquals"},
+            {Python3Lexer::GT_EQ,              "TokGtEq"},
+            {Python3Lexer::LT_EQ,              "TokLtEq"},
+            {Python3Lexer::NOT_EQ_1,           "TokNotEq1"},
+            {Python3Lexer::NOT_EQ_2,           "TokNotEq2"},
+            {Python3Lexer::AT,                 "TokAt"},
+            {Python3Lexer::ARROW,              "TokArrow"},
+            {Python3Lexer::ADD_ASSIGN,         "TokAddAssign"},
+            {Python3Lexer::SUB_ASSIGN,         "TokSubAssign"},
+            {Python3Lexer::MULT_ASSIGN,        "TokMultAssign"},
+            {Python3Lexer::AT_ASSIGN,          "TokAtAssign"},
+            {Python3Lexer::DIV_ASSIGN,         "TokDivAssign"},
+            {Python3Lexer::MOD_ASSIGN,         "TokModAssign"},
+            {Python3Lexer::AND_ASSIGN,         "TokAndAssign"},
+            {Python3Lexer::OR_ASSIGN,          "TokOrAssign"},
+            {Python3Lexer::XOR_ASSIGN,         "TokXorAssign"},
+            {Python3Lexer::LEFT_SHIFT_ASSIGN,  "TokLeftShiftAssign"},
+            {Python3Lexer::RIGHT_SHIFT_ASSIGN, "TokRightShiftAssign"},
+            {Python3Lexer::POWER_ASSIGN,       "TokPowerAssign"},
+            {Python3Lexer::IDIV_ASSIGN,        "TokIDivAssign"},
+            {Python3Lexer::SKIP_,              "TokSkip"},
+            {Python3Lexer::UNKNOWN_CHAR,       "TokUnknownChar"}
+    };
+
+}
+
 
 class PyLexer {
 public:
@@ -283,7 +303,7 @@ public:
             updateCurr(1);
         } else {
             // TODO(threadedstream): do cleanup
-            fprintf(stderr, "expected %s", tokTypeToStr[token_type].c_str());
+            fprintf(stderr, "expected %s", tok_utils::tokTypeToStr[token_type].c_str());
             exit(1);
         }
     }
@@ -415,6 +435,14 @@ struct Stmt : public Node {
     std::vector<Node *> nodes;
 };
 
+struct SimpleStmt : public Node {
+    explicit SimpleStmt(std::vector<Node *> small_stmts)
+            : small_stmts(small_stmts) {}
+
+
+    std::vector<Node *> small_stmts;
+};
+
 struct ExprList : public Node {
     explicit ExprList(std::vector<Node *> expr_list)
             : expr_list(expr_list) {}
@@ -462,7 +490,7 @@ struct Continue : public Node {
 };
 
 struct TestList : public Node {
-    explicit TestList(std::vector<Node* > nodes)
+    explicit TestList(std::vector<Node *> nodes)
             : nodes(nodes) {}
 
 
@@ -506,8 +534,30 @@ struct StarredExpr : public Node {
     Node *expr;
 };
 
+struct Raise : public Node {
+    explicit Raise(Node *exception, Node *from)
+            : exception(exception), from(from) {}
+
+    Node *exception;
+    Node *from;
+};
+
+struct Yield : public Node {
+    explicit Yield(Node *target)
+            : target(target) {}
+
+    Node *target;
+};
+
+struct YieldFrom : public Node {
+    explicit YieldFrom(Node *target)
+            : target(target) {}
+
+    Node *target;
+};
+
 struct Delete : public Node {
-    explicit Delete(ExprList *target)
+    explicit Delete(ExprList *targets)
             : targets(targets) {}
 
     std::string str() const noexcept override {
@@ -525,7 +575,7 @@ struct Const : public Node {
 
     std::string str() const noexcept override {
         std::ostringstream const_str;
-        const_str << "Const(value=" << value << ",type=" << tokTypeToStr[type];
+        const_str << "Const(value=" << value << ",type=" << tok_utils::tokTypeToStr[type];
         return const_str.str();
     }
 
@@ -561,7 +611,6 @@ struct Name : public Node {
     std::string name;
 };
 
-
 struct Argument : public Node {
     explicit Argument(Name *name, Node *type, Node *default_val)
             : name(name), type(type), default_val(default_val) {}
@@ -590,7 +639,8 @@ struct BinOp : public Node {
 
     std::string str() const noexcept override {
         std::ostringstream bin_op_str;
-        bin_op_str << "BinOp(left=" << left->str() << ",right=" << right->str() << ",op=" << tokTypeToStr[op] << ")";
+        bin_op_str << "BinOp(left=" << left->str() << ",right=" << right->str() << ",op=" << tok_utils::tokTypeToStr[op]
+                   << ")";
         return bin_op_str.str();
     }
 
@@ -609,7 +659,7 @@ struct UnaryOp : public Node {
 
     std::string str() const noexcept override {
         std::ostringstream unary_op_str;
-        unary_op_str << "UnaryOp(expr=" << expr->str() << ",op=" << tokTypeToStr[op] << ")";
+        unary_op_str << "UnaryOp(expr=" << expr->str() << ",op=" << tok_utils::tokTypeToStr[op] << ")";
         return unary_op_str.str();
     }
 
@@ -628,7 +678,8 @@ struct BoolOp : public Node {
 
     virtual std::string str() const noexcept override {
         std::ostringstream bool_op_str;
-        bool_op_str << "BoolOp(left = " << left->str() << ",right=" << right->str() << ",op=" << tokTypeToStr[op]
+        bool_op_str << "BoolOp(left = " << left->str() << ",right=" << right->str() << ",op="
+                    << tok_utils::tokTypeToStr[op]
                     << ")";
         return bool_op_str.str();
     }
@@ -648,7 +699,8 @@ struct Comparison : public Node {
 
     std::string str() const noexcept override {
         std::ostringstream comparison_str;
-        comparison_str << "Comparison(left=" << left->str() << ",right=" << right->str() << ",op=" << tokTypeToStr[op]
+        comparison_str << "Comparison(left=" << left->str() << ",right=" << right->str() << ",op="
+                       << tok_utils::tokTypeToStr[op]
                        << ")";
         return comparison_str.str();
     }

@@ -94,6 +94,66 @@ Delete *parseDelStmt(PyLexer &lexer) {
     return node;
 }
 
+
+Node *parseSimpleStmt(PyLexer &lexer) {
+    auto simple_stmt = new SimpleStmt({});
+    const auto node = parseSmallStmt(lexer);
+
+
+    while (lexer.curr->getType() == Python3Lexer::SEMI_COLON) {
+        lexer.consume(Python3Lexer::SEMI_COLON);
+
+        const auto node = parseSmallStmt(lexer);
+        simple_stmt->small_stmts.push_back(node);
+    }
+
+    lexer.consume(Python3Lexer::NEWLINE);
+}
+
+Node *parseSmallStmt(PyLexer &lexer) {
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::ASSERT:
+            return parseAssertStmt(lexer);
+        case Python3Lexer::NONLOCAL:
+            return parseNonlocalStmt(lexer);
+        case Python3Lexer::GLOBAL:
+            return parseGlobalStmt(lexer);
+        case Python3Lexer::IMPORT:
+            return parseImportStmt(lexer);
+        case Python3Lexer::PASS:
+            return parsePassStmt(lexer);
+        case Python3Lexer::DEL:
+            return parseDelStmt(lexer);
+        case Python3Lexer::BREAK:
+        case Python3Lexer::CONTINUE:
+        case Python3Lexer::RETURN:
+        case Python3Lexer::RAISE:
+        case Python3Lexer::YIELD:
+            return parseFlowStmt(lexer);
+        default:
+            return parseExprStmt(lexer);
+    }
+}
+
+Node *parseFlowStmt(PyLexer &lexer) {
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::BREAK:
+            return parseBreakStmt(lexer);
+        case Python3Lexer::CONTINUE:
+            return parseContinueStmt(lexer);
+        case Python3Lexer::RETURN:
+            return parseReturnStmt(lexer);
+        case Python3Lexer::RAISE:
+            return parseRaiseStmt(lexer);
+        case Python3Lexer::YIELD:
+            return parseYieldStmt(lexer);
+        default:
+            // less likely to get here
+            return nullptr;
+    }
+}
+
+
 Pass *parsePassStmt(PyLexer &lexer) {
     lexer.consume(Python3Lexer::PASS);
     auto pass = new Pass();
@@ -116,6 +176,8 @@ ExprList *parseExprList(PyLexer &lexer) {
             node->expr_list.push_back(parseExpr(lexer));
         }
     }
+
+    return node;
 }
 
 Node *parseSuite(PyLexer &lexer) {
@@ -134,7 +196,23 @@ Continue *parseContinueStmt(PyLexer &lexer) {
     return node;
 }
 
-Return* parseReturnStmt(PyLexer &lexer) {
+TestList *parseTestlist(PyLexer &lexer) {
+    auto test_list = new TestList({});
+
+    auto node = parseTest(lexer);
+    test_list->nodes.push_back(node);
+
+    while (lexer.curr->getType() == Python3Lexer::COMMA) {
+        lexer.consume(Python3Lexer::COMMA);
+
+        const auto node = parseTest(lexer);
+        test_list->nodes.push_back(node);
+    }
+
+    return test_list;
+}
+
+Return *parseReturnStmt(PyLexer &lexer) {
     lexer.consume(Python3Lexer::RETURN);
     auto node = new Return(nullptr);
 
@@ -143,7 +221,56 @@ Return* parseReturnStmt(PyLexer &lexer) {
     return node;
 }
 
-TestList* parseTestList(PyLexer &lexer) {
+Raise *parseRaiseStmt(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::RAISE);
+
+    auto raise = new Raise(nullptr, nullptr);
+
+    raise->exception = parseTest(lexer);
+
+    if (lexer.curr->getType() == Python3Lexer::FROM) {
+        lexer.consume(Python3Lexer::FROM);
+
+        raise->from = parseTest(lexer);
+    }
+
+    return raise;
+}
+
+Node *parseYieldStmt(PyLexer &lexer) {
+     return parseYieldExpr(lexer);
+}
+
+Node *parseYieldExpr(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::YIELD);
+
+    if (lexer.curr->getType() == Python3Lexer::FROM) {
+        lexer.consume(Python3Lexer::FROM);
+
+        auto yield_from = new YieldFrom(nullptr);
+        yield_from->target = parseTest(lexer);
+        return yield_from;
+    }
+
+    auto yield_stmt = new Yield(nullptr);
+
+    yield_stmt->target = parseTestlist(lexer);
+
+    return yield_stmt;
+}
+
+Node *parseYieldArg(PyLexer &lexer) {
+    if (lexer.curr->getType() == Python3Lexer::FROM) {
+        lexer.consume(Python3Lexer::FROM);
+        auto yield_from = new YieldFrom(nullptr);
+        yield_from->target = parseTest(lexer);
+        return yield_from;
+    }
+
+    return parseTestlist(lexer);
+}
+
+TestList *parseTestList(PyLexer &lexer) {
     auto test_list = new TestList({});
 
     const auto node = parseTest(lexer);
@@ -153,6 +280,8 @@ TestList* parseTestList(PyLexer &lexer) {
         lexer.consume(Python3Lexer::COMMA);
         test_list->nodes.push_back(parseTest(lexer));
     }
+
+    return test_list;
 }
 
 Node *parseSimpleStmt(PyLexer &lexer) {
