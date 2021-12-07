@@ -136,12 +136,19 @@ Node *parseSmallStmt(PyLexer &lexer) {
     }
 }
 
-Node *parseAssertStmt(PyLexer &lexer) {
+Assert *parseAssertStmt(PyLexer &lexer) {
     lexer.consume(Python3Lexer::ASSERT);
 
     auto assert = new Assert(nullptr, nullptr);
 
-    // TODO: finish that up
+    assert->test = parseTest(lexer);
+
+    if (lexer.curr->getType() == Python3Lexer::COMMA) {
+        lexer.consume(Python3Lexer::COMMA);
+        assert->message = parseTest(lexer);
+    }
+
+    return assert;
 }
 
 Node *parseFlowStmt(PyLexer &lexer) {
@@ -189,9 +196,45 @@ ExprList *parseExprList(PyLexer &lexer) {
     return node;
 }
 
+
+Alias *parseImportAsName(PyLexer &lexer) {
+    auto alias = new Alias(nullptr, nullptr);
+
+    auto name = new Name(lexer.curr->getText());
+
+    lexer.consume(Python3Lexer::NAME);
+    lexer.consume(Python3Lexer::AS);
+
+    auto as = new Name(lexer.curr->getText());
+
+    alias->name = name;
+    alias->as = as;
+
+    return alias;
+}
+
+Aliases *parseImportAsNames(PyLexer &lexer) {
+    // TODO(threadedstream): finish that up
+}
+
+
 Node *parseSuite(PyLexer &lexer) {
     return nullptr;
 }
+
+Node *parseImportStmt(PyLexer &lexer) {
+    if (lexer.curr->getType() == Python3Lexer::IMPORT) {
+        return parseImportName(lexer);
+    } else if (lexer.curr->getType() == Python3Lexer::FROM) {
+        return parseImportFrom(lexer);
+    }
+}
+
+Import *parseImportName(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::IMPORT);
+}
+
+
 
 Break *parseBreakStmt(PyLexer &lexer) {
     lexer.consume(Python3Lexer::BREAK);
@@ -401,7 +444,7 @@ TestList *parseTestlistStarExpr(PyLexer &lexer) {
     return test_list;
 }
 
-Node *parseGlobalStmt(PyLexer &lexer) {
+Global *parseGlobalStmt(PyLexer &lexer) {
     lexer.consume(Python3Lexer::GLOBAL);
 
     auto global = new Global({});
@@ -420,7 +463,7 @@ Node *parseGlobalStmt(PyLexer &lexer) {
     return global;
 }
 
-Node *parseNonlocalStmt(PyLexer &lexer) {
+Nonlocal *parseNonlocalStmt(PyLexer &lexer) {
     lexer.consume(Python3Lexer::NONLOCAL);
 
     auto nonlocal = new Nonlocal({});

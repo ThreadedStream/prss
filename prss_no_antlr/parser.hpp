@@ -40,8 +40,12 @@ struct Pass;
 struct Yield;
 struct YieldFrom;
 struct ExprList;
+struct Import;
+struct ImportFrom;
 struct Raise;
 struct Break;
+struct Alias;
+struct Aliases;
 struct Continue;
 struct Return;
 struct Const;
@@ -115,6 +119,16 @@ Node *parseStmt(PyLexer &lexer);
 
 Node *parseSimpleStmt(PyLexer &lexer);
 
+Node *parseImportStmt(PyLexer &lexer);
+
+Import *parseImportName(PyLexer &lexer);
+
+ImportFrom *parseImportFrom(PyLexer &lexer);
+
+Alias *parseImportAsName(PyLexer &lexer);
+
+Aliases *parseImportAsNames(PyLexer &lexer);
+
 Raise *parseRaiseStmt(PyLexer &lexer);
 
 Node *parseYieldStmt(PyLexer &lexer);
@@ -129,6 +143,8 @@ Delete *parseDelStmt(PyLexer &lexer);
 
 Pass *parsePassStmt(PyLexer &lexer);
 
+Node *parseDottedName(PyLexer &lexer);
+
 Break *parseBreakStmt(PyLexer &lexer);
 
 Continue *parseContinueStmt(PyLexer &lexer);
@@ -139,11 +155,11 @@ Node *parseFlowStmt(PyLexer &lexer);
 
 Node *parseImportStmt(PyLexer &lexer);
 
-Node *parseGlobalStmt(PyLexer &lexer);
+Global *parseGlobalStmt(PyLexer &lexer);
 
-Node *parseNonlocalStmt(PyLexer &lexer);
+Nonlocal *parseNonlocalStmt(PyLexer &lexer);
 
-Node *parseAssertStmt(PyLexer &lexer);
+Assert *parseAssertStmt(PyLexer &lexer);
 
 Node *parseSmallStmt(PyLexer &lexer);
 
@@ -435,7 +451,7 @@ struct Stmt : public Node {
 };
 
 struct SimpleStmt : public Node {
-    explicit SimpleStmt(std::vector<Node *> small_stmts)
+    explicit SimpleStmt(const std::vector<Node *> &small_stmts)
             : small_stmts(small_stmts) {}
 
 
@@ -443,7 +459,7 @@ struct SimpleStmt : public Node {
 };
 
 struct ExprList : public Node {
-    explicit ExprList(std::vector<Node *> expr_list)
+    explicit ExprList(const std::vector<Node *>& expr_list)
             : expr_list(expr_list) {}
 
     std::vector<Node *> expr_list;
@@ -472,6 +488,23 @@ struct IfStmt : public Node {
     Node *else_body;
 };
 
+struct Import : public Node {
+    explicit Import(Name *name, Name *as)
+            : name(name), as(as) {}
+
+    Name *name;
+    Name *as;
+};
+
+struct ImportFrom : public Node {
+    explicit ImportFrom(Name *name, Name *as, int32_t level)
+            : name(name), as(as), level(level) {}
+
+    Name *name;
+    Name *as;
+    int32_t level;
+};
+
 struct Return : public Node {
     explicit Return(TestList *test_list)
             : test_list(test_list) {}
@@ -489,7 +522,7 @@ struct Continue : public Node {
 };
 
 struct TestList : public Node {
-    explicit TestList(std::vector<Node *> nodes)
+    explicit TestList(const std::vector<Node *>& nodes)
             : nodes(nodes) {}
 
 
@@ -650,6 +683,20 @@ struct Argument : public Node {
     Node *default_val;
 };
 
+struct Alias {
+    explicit Alias(Name *name, Name *as)
+            : name(name), as(as) {}
+
+    Name *name;
+    Name *as;
+};
+
+struct Aliases {
+    explicit Aliases(const std::vector<Alias *> aliases)
+            : aliases(aliases) {}
+
+    std::vector<Alias *> aliases;
+};
 
 struct BinOp : public Node {
     explicit BinOp(Node *left, Node *right, int32_t op) : left(left), right(right), op(op) {}
@@ -752,7 +799,7 @@ struct Pass : public Node {
 };
 
 struct Global : public Node {
-    explicit Global(std::vector<Name *> names)
+    explicit Global(const std::vector<Name *>& names)
             : names(names) {}
 
     std::vector<Name *> names;
@@ -768,7 +815,7 @@ struct Assert : public Node {
 };
 
 struct Nonlocal : public Node {
-    explicit Nonlocal(std::vector<Name *> names)
+    explicit Nonlocal(const std::vector<Name *>& names)
             : names(names) {}
 
     std::vector<Name *> names;
