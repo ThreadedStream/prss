@@ -34,23 +34,22 @@ struct UnaryOp;
 struct BoolOp;
 struct Name;
 struct Assign;
+struct AnnAssign;
 struct StarredExpr;
 struct Pass;
 struct Yield;
 struct YieldFrom;
 struct ExprList;
 struct Raise;
-struct Add;
 struct Break;
 struct Continue;
 struct Return;
-struct AssName;
-struct Discard;
 struct Const;
-struct Tfpdef;
 struct Argument;
 struct Arguments;
-struct Test;
+struct Global;
+struct Assert;
+struct Nonlocal;
 struct TestList;
 struct IfStmt;
 struct Delete;
@@ -90,6 +89,8 @@ Node *parseTest(PyLexer &lexer);
 
 Node *parseTestNoCond(PyLexer &lexer);
 
+TestList *parseTestlistStarExpr(PyLexer &lexer);
+
 Node *parseLambDef(PyLexer &lexer);
 
 Node *parseLambDefNoCond(PyLexer &lexer);
@@ -120,9 +121,9 @@ Node *parseYieldStmt(PyLexer &lexer);
 
 Node *parseYieldExpr(PyLexer &lexer);
 
-Node *parseYieldArg(PyLexer &lexer);
-
 Node *parseExprStmt(PyLexer &lexer);
+
+AnnAssign *parseAnnAssign(PyLexer &lexer);
 
 Delete *parseDelStmt(PyLexer &lexer);
 
@@ -147,8 +148,6 @@ Node *parseAssertStmt(PyLexer &lexer);
 Node *parseSmallStmt(PyLexer &lexer);
 
 TestList *parseTestlist(PyLexer &lexer);
-
-Node *parseTestlistStarExpr(PyLexer &lexer);
 
 Node *buildAst(PyLexer &lexer);
 
@@ -498,11 +497,29 @@ struct TestList : public Node {
 };
 
 struct Assign : public Node {
-    explicit Assign(const std::vector<Node *> &assignees, Node *assigner)
-            : assignees(assignees), assigner(assigner) {}
+    explicit Assign(TestList *targets, Node *value)
+            : targets(targets), value(value) {}
 
-    std::vector<Node *> assignees;
-    Node *assigner;
+    TestList *targets;
+    Node *value;
+};
+
+struct AugAssign : public Node {
+    explicit AugAssign(Node *target, const int32_t op, Node *value)
+            : target(target), op(op), value(value) {}
+
+    Node *target;
+    int32_t op;
+    Node *value;
+};
+
+struct AnnAssign : public Node {
+    explicit AnnAssign(Node *target, Node *annotation, Node *value)
+            : target(target), annotation(annotation), value(value) {}
+
+    Node *target;
+    Node *annotation;
+    Node *value;
 };
 
 struct AssName : public Node {
@@ -733,6 +750,30 @@ struct FuncDef : public Node {
 struct Pass : public Node {
     Pass() {}
 };
+
+struct Global : public Node {
+    explicit Global(std::vector<Name *> names)
+            : names(names) {}
+
+    std::vector<Name *> names;
+
+};
+
+struct Assert : public Node {
+    explicit Assert(Node *test, Node *message)
+            : test(test), message(message) {}
+
+    Node *test;
+    Node *message;
+};
+
+struct Nonlocal : public Node {
+    explicit Nonlocal(std::vector<Name *> names)
+            : names(names) {}
+
+    std::vector<Name *> names;
+};
+
 
 struct CallFunc : public Node {
     explicit CallFunc(Name *name, Arguments *arguments)

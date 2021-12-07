@@ -99,7 +99,6 @@ Node *parseSimpleStmt(PyLexer &lexer) {
     auto simple_stmt = new SimpleStmt({});
     const auto node = parseSmallStmt(lexer);
 
-
     while (lexer.curr->getType() == Python3Lexer::SEMI_COLON) {
         lexer.consume(Python3Lexer::SEMI_COLON);
 
@@ -108,6 +107,8 @@ Node *parseSimpleStmt(PyLexer &lexer) {
     }
 
     lexer.consume(Python3Lexer::NEWLINE);
+
+    return simple_stmt;
 }
 
 Node *parseSmallStmt(PyLexer &lexer) {
@@ -133,6 +134,14 @@ Node *parseSmallStmt(PyLexer &lexer) {
         default:
             return parseExprStmt(lexer);
     }
+}
+
+Node *parseAssertStmt(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::ASSERT);
+
+    auto assert = new Assert(nullptr, nullptr);
+
+    // TODO: finish that up
 }
 
 Node *parseFlowStmt(PyLexer &lexer) {
@@ -238,7 +247,7 @@ Raise *parseRaiseStmt(PyLexer &lexer) {
 }
 
 Node *parseYieldStmt(PyLexer &lexer) {
-     return parseYieldExpr(lexer);
+    return parseYieldExpr(lexer);
 }
 
 Node *parseYieldExpr(PyLexer &lexer) {
@@ -259,17 +268,6 @@ Node *parseYieldExpr(PyLexer &lexer) {
     return yield_stmt;
 }
 
-Node *parseYieldArg(PyLexer &lexer) {
-    if (lexer.curr->getType() == Python3Lexer::FROM) {
-        lexer.consume(Python3Lexer::FROM);
-        auto yield_from = new YieldFrom(nullptr);
-        yield_from->target = parseTest(lexer);
-        return yield_from;
-    }
-
-    return parseTestlist(lexer);
-}
-
 TestList *parseTestList(PyLexer &lexer) {
     auto test_list = new TestList({});
 
@@ -284,9 +282,6 @@ TestList *parseTestList(PyLexer &lexer) {
     return test_list;
 }
 
-Node *parseSimpleStmt(PyLexer &lexer) {
-    return nullptr;
-}
 
 Argument *parseArgument(PyLexer &lexer) {
     const auto current_token = lexer.curr;
@@ -358,8 +353,7 @@ Node *parseTest(PyLexer &lexer) {
             lexer.consume(Python3Lexer::ELSE);
             const auto else_body = parseTest(lexer);
             node = new IfStmt(if_test, node, else_body);
-        }
-            break;
+        }break;
         case Python3Lexer::LAMBDA:
             node = parseLambDef(lexer);
             break;
@@ -380,6 +374,155 @@ Node *parseExpr(PyLexer &lexer) {
     }
 
     return node;
+}
+
+// testlist_star_expr: (test|star_expr) (',' (test|star_expr))* (',')?;
+TestList *parseTestlistStarExpr(PyLexer &lexer) {
+    auto test_list = new TestList({});
+    Node *expr;
+    if (lexer.curr->getType() == Python3Lexer::STAR) {
+        expr = parseStarExpr(lexer);
+    } else {
+        expr = parseTest(lexer);
+    }
+
+    test_list->nodes.push_back(expr);
+
+    while (lexer.curr->getType() == Python3Lexer::COMMA) {
+        Node *expr;
+        if (lexer.curr->getType() == Python3Lexer::STAR) {
+            expr = parseStarExpr(lexer);
+        } else {
+            expr = parseTest(lexer);
+        }
+        test_list->nodes.push_back(expr);
+    }
+
+    return test_list;
+}
+
+Node *parseGlobalStmt(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::GLOBAL);
+
+    auto global = new Global({});
+
+    const auto current_token = lexer.curr;
+    lexer.consume(Python3Lexer::NAME);
+    const auto name = new Name(current_token->getText());
+
+    global->names.push_back(name);
+    while (lexer.curr->getType() == Python3Lexer::COMMA) {
+        lexer.consume(Python3Lexer::COMMA);
+        const auto name = new Name(lexer.curr->getText());
+        global->names.push_back(name);
+    }
+
+    return global;
+}
+
+Node *parseNonlocalStmt(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::NONLOCAL);
+
+    auto nonlocal = new Nonlocal({});
+
+    const auto current_token = lexer.curr;
+    lexer.consume(Python3Lexer::NAME);
+    const auto name = new Name(current_token->getText());
+
+    nonlocal->names.push_back(name);
+    while (lexer.curr->getType() == Python3Lexer::COMMA) {
+        lexer.consume(Python3Lexer::COMMA);
+        const auto name = new Name(lexer.curr->getText());
+        nonlocal->names.push_back(name);
+    }
+
+    return nonlocal;
+}
+
+// expr_stmt: testlist_star_expr (annassign | augassign (yield_expr|testlist) |
+//                     ('=' (yield_expr|testlist_star_expr))*);
+Node *parseExprStmt(PyLexer &lexer) {
+    const auto test_list_star_expr = parseTestlistStarExpr(lexer);
+
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::COLON: {
+            const auto ann_assign = parseAnnAssign(lexer);
+            ann_assign->target = test_list_star_expr;
+            return ann_assign;
+        }
+        case Python3Lexer::ASSIGN: {
+            auto assign = new Assign(nullptr, nullptr);
+            assign->targets = test_list_star_expr;
+            while (lexer.curr->getType() == Python3Lexer::ASSIGN) {
+                lexer.consume(Python3Lexer::ASSIGN);
+                if (lexer.curr->getType() == Python3Lexer::YIELD) {
+                    assign->value = parseYieldExpr(lexer);
+                } else {
+                    assign->value = parseTestlistStarExpr(lexer);
+                }
+            }
+            return assign;
+        }
+        default: {
+            if (isAugAssign(lexer.curr)) {
+                auto aug_assign = new AugAssign(nullptr, lexer.curr->getType(), nullptr);
+                aug_assign->target = test_list_star_expr;
+                lexer.consume(lexer.curr->getType());
+                Node *value;
+                if (lexer.curr->getType() == Python3Lexer::YIELD) {
+                    value = parseYieldExpr(lexer);
+                } else {
+                    value = parseTestList(lexer);
+                }
+                aug_assign->value = value;
+                return aug_assign;
+            }
+        }
+    }
+}
+
+AnnAssign *parseAnnAssign(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::COLON);
+
+    auto ann_assign = new AnnAssign(nullptr, nullptr, nullptr);
+
+    const auto annotation = parseTest(lexer);
+
+    ann_assign->annotation = ann_assign;
+    if (lexer.curr->getType() == Python3Lexer::ASSIGN) {
+        lexer.consume(Python3Lexer::ASSIGN);
+
+        const auto value = parseTest(lexer);
+        ann_assign->value = value;
+    }
+
+    return ann_assign;
+}
+
+TestList *parseTestListStarExpr(PyLexer &lexer) {
+    TestList *test_list = new TestList({});
+
+    Node *node;
+    if (lexer.curr->getType() == Python3Lexer::STAR) {
+        node = parseStarExpr(lexer);
+    } else {
+        node = parseTest(lexer);
+    }
+
+    test_list->nodes.push_back(node);
+    while (lexer.curr->getType() == Python3Lexer::COMMA) {
+        lexer.consume(Python3Lexer::COMMA);
+
+        Node *n;
+        if (lexer.curr->getType() == Python3Lexer::STAR) {
+            n = parseStarExpr(lexer);
+        } else {
+            n = parseTest(lexer);
+        }
+        test_list->nodes.push_back(n);
+    }
+
+    return test_list;
 }
 
 StarredExpr *parseStarExpr(PyLexer &lexer) {
