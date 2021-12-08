@@ -99,6 +99,7 @@ Node *parseSimpleStmt(PyLexer &lexer) {
     auto simple_stmt = new SimpleStmt({});
     const auto node = parseSmallStmt(lexer);
 
+    simple_stmt->small_stmts.push_back(node);
     while (lexer.curr->getType() == Python3Lexer::SEMI_COLON) {
         lexer.consume(Python3Lexer::SEMI_COLON);
 
@@ -210,7 +211,7 @@ ImportFrom *parseImportFrom(PyLexer &lexer) {
     if (level == 0 && !(lexer.curr->getType() == Python3Lexer::NAME)) {
         // TODO(threadedstream): adhoc method to report an error and terminate application
         // call to destroyAst() would be great
-        PANIC(Python3Lexer::NAME);
+        ERR_TOK(Python3Lexer::NAME);
         exit(1);
     }
 
@@ -225,7 +226,7 @@ ImportFrom *parseImportFrom(PyLexer &lexer) {
     // may look really dumb
     switch (lexer.curr->getType()) {
         case Python3Lexer::STAR: {
-            const auto name = new Name("*", nullptr);
+            const auto name = new Name("*");
             import_from->aliases->aliases.push_back(new Alias(name, nullptr));
         }break;
         case Python3Lexer::OPEN_PAREN: {
@@ -237,9 +238,7 @@ ImportFrom *parseImportFrom(PyLexer &lexer) {
             import_from->aliases = parseImportAsNames(lexer);
             break;
         default:
-            // TODO(threadedstream): handle case with a problematic scenario when
-            // nothing above is matched
-            break;
+            ERR_MSG("expected STAR, OPEN_PAREN or NAME\n");
     }
 
     return import_from;
@@ -264,6 +263,31 @@ Name *parseDottedName(PyLexer &lexer) {
     return dotted_name;
 }
 
+Alias *parseDottedAsName(PyLexer &lexer) {
+    const auto dotted_name = parseDottedName(lexer);
+    auto alias = new Alias(dotted_name, nullptr);
+    if (lexer.curr->getType() == Python3Lexer::AS) {
+        lexer.consume(Python3Lexer::AS);
+        alias->as = new Name(lexer.curr->getText());
+    }
+
+    return alias;
+}
+
+Aliases *parseDottedAsNames(PyLexer &lexer) {
+    const auto dotted_as_name = parseDottedAsName(lexer);
+    auto aliases = new Aliases({});
+    aliases->aliases.push_back(dotted_as_name);
+
+    while (lexer.curr->getType() == Python3Lexer::COMMA) {
+        lexer.consume(Python3Lexer::COMMA);
+        const auto dotted_as_name = parseDottedAsName(lexer);
+        aliases->aliases.push_back(dotted_as_name);
+    }
+
+    return aliases;
+}
+
 Alias *parseImportAsName(PyLexer &lexer) {
     auto alias = new Alias(nullptr, nullptr);
 
@@ -273,6 +297,8 @@ Alias *parseImportAsName(PyLexer &lexer) {
     lexer.consume(Python3Lexer::AS);
 
     auto as = new Name(lexer.curr->getText());
+
+    lexer.consume(Python3Lexer::NAME);
 
     alias->name = name;
     alias->as = as;
@@ -295,8 +321,20 @@ Aliases *parseImportAsNames(PyLexer &lexer) {
     return aliases;
 }
 
-Node *parseSuite(PyLexer &lexer) {
+Node *parseStmt(PyLexer &lexer) {
     return nullptr;
+}
+
+Node *parseSuite(PyLexer &lexer) {
+    if (lexer.curr->getType() == Python3Lexer::NEWLINE) {
+        lexer.consume(Python3Lexer::NEWLINE);
+        lexer.consume(Python3Parser::INDENT);
+        const auto stmt = parseStmt(lexer);
+        lexer.consume(Python3Parser::DEDENT);
+        return stmt;
+    } else {
+        return parseSimpleStmt(lexer);
+    }
 }
 
 Node *parseImportStmt(PyLexer &lexer) {
@@ -304,11 +342,18 @@ Node *parseImportStmt(PyLexer &lexer) {
         return parseImportName(lexer);
     } else if (lexer.curr->getType() == Python3Lexer::FROM) {
         return parseImportFrom(lexer);
+    } else {
+        ERR_MSG("expected IMPORT or FROM\n");
+        exit(1);
     }
 }
 
 Import *parseImportName(PyLexer &lexer) {
     lexer.consume(Python3Lexer::IMPORT);
+    const auto aliases = parseDottedAsNames(lexer);
+    auto import = new Import(aliases);
+
+    return import;
 }
 
 Break *parseBreakStmt(PyLexer &lexer) {
@@ -399,6 +444,7 @@ TestList *parseTestList(PyLexer &lexer) {
 
     return test_list;
 }
+
 
 
 Argument *parseArgument(PyLexer &lexer) {
@@ -598,6 +644,10 @@ Node *parseExprStmt(PyLexer &lexer) {
             }
         }
     }
+
+    // maybe, trigger crash
+    ERR_MSG("expected COLON, ASSIGN or AUG_ASSIGN");
+    exit(1);
 }
 
 AnnAssign *parseAnnAssign(PyLexer &lexer) {
@@ -607,7 +657,7 @@ AnnAssign *parseAnnAssign(PyLexer &lexer) {
 
     const auto annotation = parseTest(lexer);
 
-    ann_assign->annotation = ann_assign;
+    ann_assign->annotation = annotation;
     if (lexer.curr->getType() == Python3Lexer::ASSIGN) {
         lexer.consume(Python3Lexer::ASSIGN);
 

@@ -13,7 +13,9 @@
 #include "Python3Lexer.h"
 
 
-#define PANIC(expected_token_type) fprintf(stderr, "expected token %d", expected_token_type)
+#define ERR_TOK(expected_token_type) fprintf(stderr, "expected token %d", expected_token_type)
+
+#define ERR_MSG(message) fprintf(stderr, message)
 
 template<typename T>
 using opt = std::optional<T>;
@@ -146,6 +148,10 @@ Delete *parseDelStmt(PyLexer &lexer);
 Pass *parsePassStmt(PyLexer &lexer);
 
 Name *parseDottedName(PyLexer &lexer);
+
+Alias *parseDottedAsName(PyLexer &lexer);
+
+Aliases *parseDottedAsNames(PyLexer &lexer);
 
 Break *parseBreakStmt(PyLexer &lexer);
 
@@ -383,6 +389,10 @@ inline bool isTermOp(const Token *tok) {
 }
 
 inline bool isCompOp(PyLexer &lexer) {
+    if (!lexer.curr || !lexer.next) {
+        return false;
+    }
+
     const auto token_type = lexer.curr->getType();
     const auto next_token_type = lexer.next->getType();
 
@@ -461,7 +471,7 @@ struct SimpleStmt : public Node {
 };
 
 struct ExprList : public Node {
-    explicit ExprList(const std::vector<Node *>& expr_list)
+    explicit ExprList(const std::vector<Node *> &expr_list)
             : expr_list(expr_list) {}
 
     std::vector<Node *> expr_list;
@@ -491,15 +501,14 @@ struct IfStmt : public Node {
 };
 
 struct Import : public Node {
-    explicit Import(Name *name, Name *as)
-            : name(name), as(as) {}
+    explicit Import(Aliases *aliases)
+            : aliases(aliases) {}
 
-    Name *name;
-    Name *as;
+    Aliases *aliases;
 };
 
 struct ImportFrom : public Node {
-    explicit ImportFrom(Name* module, Aliases *aliases, int32_t level)
+    explicit ImportFrom(Name *module, Aliases *aliases, int32_t level)
             : module(module), aliases(aliases), level(level) {}
 
     Name *module;
@@ -524,7 +533,7 @@ struct Continue : public Node {
 };
 
 struct TestList : public Node {
-    explicit TestList(const std::vector<Node *>& nodes)
+    explicit TestList(const std::vector<Node *> &nodes)
             : nodes(nodes) {}
 
 
@@ -564,6 +573,7 @@ struct AssName : public Node {
     std::string name;
     AssignFlag flags;
 };
+
 
 // TODO(threadedstream): What meaning does Discard possess?
 struct Discard : public Node {
@@ -801,7 +811,7 @@ struct Pass : public Node {
 };
 
 struct Global : public Node {
-    explicit Global(const std::vector<Name *>& names)
+    explicit Global(const std::vector<Name *> &names)
             : names(names) {}
 
     std::vector<Name *> names;
@@ -817,7 +827,7 @@ struct Assert : public Node {
 };
 
 struct Nonlocal : public Node {
-    explicit Nonlocal(const std::vector<Name *>& names)
+    explicit Nonlocal(const std::vector<Name *> &names)
             : names(names) {}
 
     std::vector<Name *> names;

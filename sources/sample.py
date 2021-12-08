@@ -1,2 +1,1 @@
-def f(x: int, y: int, z: int = 0) -> int:
-    pass
+def dot(x: float, y: float, z: float) -> float: return x + y + z

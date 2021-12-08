@@ -10,4 +10,3 @@ add_executable(prss_no_antlr main.cpp parser.hpp parser.cpp)
 target_compile_options(prss_no_antlr PUBLIC "-g" ${COMPILER_FLAGS})
 target_include_directories(prss_no_antlr PUBLIC ${ANTLR_INCLUDE_DIR} ${GEN_INCLUDE_DIR})
 target_link_libraries(prss_no_antlr PUBLIC  ${ANTLR_SHARED_LIB} ${GEN_SHARED_LIB})
-
