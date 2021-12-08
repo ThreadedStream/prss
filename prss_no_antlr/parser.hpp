@@ -13,6 +13,8 @@
 #include "Python3Lexer.h"
 
 
+#define PANIC(expected_token_type) fprintf(stderr, "expected token %d", expected_token_type)
+
 template<typename T>
 using opt = std::optional<T>;
 
@@ -143,7 +145,7 @@ Delete *parseDelStmt(PyLexer &lexer);
 
 Pass *parsePassStmt(PyLexer &lexer);
 
-Node *parseDottedName(PyLexer &lexer);
+Name *parseDottedName(PyLexer &lexer);
 
 Break *parseBreakStmt(PyLexer &lexer);
 
@@ -497,11 +499,11 @@ struct Import : public Node {
 };
 
 struct ImportFrom : public Node {
-    explicit ImportFrom(Name *name, Name *as, int32_t level)
-            : name(name), as(as), level(level) {}
+    explicit ImportFrom(Name* module, Aliases *aliases, int32_t level)
+            : module(module), aliases(aliases), level(level) {}
 
-    Name *name;
-    Name *as;
+    Name *module;
+    Aliases *aliases;
     int32_t level;
 };
 

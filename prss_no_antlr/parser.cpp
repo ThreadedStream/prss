@@ -197,6 +197,73 @@ ExprList *parseExprList(PyLexer &lexer) {
 }
 
 
+ImportFrom *parseImportFrom(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::FROM);
+    auto import_from = new ImportFrom(nullptr, nullptr, 0);
+    int32_t level;
+
+    while (lexer.curr->getType() == Python3Lexer::DOT) {
+        lexer.consume(Python3Lexer::DOT);
+        level++;
+    }
+
+    if (level == 0 && !(lexer.curr->getType() == Python3Lexer::NAME)) {
+        // TODO(threadedstream): adhoc method to report an error and terminate application
+        // call to destroyAst() would be great
+        PANIC(Python3Lexer::NAME);
+        exit(1);
+    }
+
+    import_from->level = level;
+    if (lexer.curr->getType() == Python3Lexer::NAME) {
+        const auto name = parseDottedName(lexer);
+        import_from->module = name;
+    }
+
+    lexer.consume(Python3Lexer::IMPORT);
+
+    // may look really dumb
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::STAR: {
+            const auto name = new Name("*", nullptr);
+            import_from->aliases->aliases.push_back(new Alias(name, nullptr));
+        }break;
+        case Python3Lexer::OPEN_PAREN: {
+            lexer.consume(Python3Lexer::OPEN_PAREN);
+            import_from->aliases = parseImportAsNames(lexer);
+            lexer.consume(Python3Lexer::CLOSE_PAREN);
+        }break;
+        case Python3Lexer::NAME:
+            import_from->aliases = parseImportAsNames(lexer);
+            break;
+        default:
+            // TODO(threadedstream): handle case with a problematic scenario when
+            // nothing above is matched
+            break;
+    }
+
+    return import_from;
+}
+
+Name *parseDottedName(PyLexer &lexer) {
+    std::string name;
+    const auto current_token = lexer.curr;
+    lexer.consume(Python3Lexer::NAME);
+
+    name += current_token->getText();
+
+    while (lexer.curr->getType() == Python3Lexer::DOT) {
+        lexer.consume(Python3Lexer::DOT);
+        const auto current_token = lexer.curr;
+        lexer.consume(Python3Lexer::NAME);
+        name += current_token->getText();
+    }
+
+    auto dotted_name = new Name(name);
+
+    return dotted_name;
+}
+
 Alias *parseImportAsName(PyLexer &lexer) {
     auto alias = new Alias(nullptr, nullptr);
 
@@ -214,9 +281,19 @@ Alias *parseImportAsName(PyLexer &lexer) {
 }
 
 Aliases *parseImportAsNames(PyLexer &lexer) {
-    // TODO(threadedstream): finish that up
-}
+    auto aliases = new Aliases({});
+    const auto alias = parseImportAsName(lexer);
 
+    aliases->aliases.push_back(alias);
+
+    while (lexer.curr->getType() == Python3Lexer::COMMA) {
+        lexer.consume(Python3Lexer::COMMA);
+        const auto alias = parseImportAsName(lexer);
+        aliases->aliases.push_back(alias);
+    }
+
+    return aliases;
+}
 
 Node *parseSuite(PyLexer &lexer) {
     return nullptr;
@@ -233,8 +310,6 @@ Node *parseImportStmt(PyLexer &lexer) {
 Import *parseImportName(PyLexer &lexer) {
     lexer.consume(Python3Lexer::IMPORT);
 }
-
-
 
 Break *parseBreakStmt(PyLexer &lexer) {
     lexer.consume(Python3Lexer::BREAK);
@@ -396,7 +471,8 @@ Node *parseTest(PyLexer &lexer) {
             lexer.consume(Python3Lexer::ELSE);
             const auto else_body = parseTest(lexer);
             node = new IfStmt(if_test, node, else_body);
-        }break;
+        }
+            break;
         case Python3Lexer::LAMBDA:
             node = parseLambDef(lexer);
             break;
