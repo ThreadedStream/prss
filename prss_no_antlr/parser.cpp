@@ -103,11 +103,18 @@ Node *parseSimpleStmt(PyLexer &lexer) {
     while (lexer.curr->getType() == Python3Lexer::SEMI_COLON) {
         lexer.consume(Python3Lexer::SEMI_COLON);
 
+        // handle a terminal semicolon
+        if (lexer.curr->getType() == Python3Lexer::EOF ||
+            lexer.curr->getType() == Python3Lexer::NEWLINE) {
+            break;
+        }
         const auto node = parseSmallStmt(lexer);
         simple_stmt->small_stmts.push_back(node);
     }
 
-    lexer.consume(Python3Lexer::NEWLINE);
+    if (lexer.curr->getType() == Python3Lexer::NEWLINE) {
+        lexer.consume(Python3Lexer::NEWLINE);
+    }
 
     return simple_stmt;
 }
@@ -203,6 +210,7 @@ ImportFrom *parseImportFrom(PyLexer &lexer) {
     auto import_from = new ImportFrom(nullptr, nullptr, 0);
     int32_t level;
 
+    // TODO(threadedstream): handle case with ellipsis
     while (lexer.curr->getType() == Python3Lexer::DOT) {
         lexer.consume(Python3Lexer::DOT);
         level++;
@@ -287,6 +295,31 @@ Aliases *parseDottedAsNames(PyLexer &lexer) {
 
     return aliases;
 }
+
+IfStmt* parseIfStmt(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::IF);
+    auto if_stmt = new IfStmt(nullptr, nullptr, nullptr);
+
+    if_stmt->test = parseTest(lexer);
+    lexer.consume(Python3Lexer::COLON);
+
+    if_stmt->body = parseSuite(lexer);
+
+    while (lexer.curr->getType() == Python3Lexer::ELIF) {
+        lexer.consume(Python3Lexer::ELIF);
+        if_stmt->or_else = parseIfStmt(lexer);
+    }
+
+    if (lexer.curr->getType() == Python3Lexer::ELSE) {
+        lexer.consume(Python3Lexer::ELSE);
+        lexer.consume(Python3Lexer::COLON);
+        if_stmt->or_else = parseIfStmt(lexer);
+    }
+
+    return if_stmt;
+}
+
+
 
 Alias *parseImportAsName(PyLexer &lexer) {
     auto alias = new Alias(nullptr, nullptr);
@@ -445,6 +478,10 @@ TestList *parseTestList(PyLexer &lexer) {
     return test_list;
 }
 
+WhileStmt *parseWhileStmt(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::WHILE);
+    auto
+}
 
 
 Argument *parseArgument(PyLexer &lexer) {
@@ -859,7 +896,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseFuncDef(lexer);
+    return parseIfStmt(lexer);
 }
 
 void destroyAst(Node *root) {

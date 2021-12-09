@@ -1,1 +1,8 @@
-def dot(x: float, y: float, z: float) -> float: return x + y + z
+if x < 5:
+    return x
+elif y > 7:
+    return y
+elif y < 15:
+    return z
+else:
+    return w

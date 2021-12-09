@@ -60,6 +60,12 @@ struct Assert;
 struct Nonlocal;
 struct TestList;
 struct IfStmt;
+struct WhileStmt;
+struct ForStmt;
+struct TryStmt;
+struct WithStmt;
+struct ClassDef;
+
 struct Delete;
 
 class PyLexer;
@@ -127,9 +133,21 @@ Node *parseImportStmt(PyLexer &lexer);
 
 Import *parseImportName(PyLexer &lexer);
 
+Node *parseCompoundStmt(PyLexer &lexer);
+
 ImportFrom *parseImportFrom(PyLexer &lexer);
 
 Alias *parseImportAsName(PyLexer &lexer);
+
+IfStmt *parseIfStmt(PyLexer &lexer);
+
+WhileStmt *parseWhileStmt(PyLexer &lexer);
+
+WithStmt *parseWithStmt(PyLexer &lexer);
+
+ForStmt *parseForStmt(PyLexer &lexer);
+
+TryStmt *parseTryStmt(PyLexer &lexer);
 
 Aliases *parseImportAsNames(PyLexer &lexer);
 
@@ -482,22 +500,22 @@ struct Test : public Node {
 };
 
 struct IfStmt : public Node {
-    explicit IfStmt(Node *test, Node *body, Node *else_body)
-            : test(test), body(body), else_body(else_body) {}
+    explicit IfStmt(Node *test, Node *body, Node *or_else)
+            : test(test), body(body), or_else(or_else) {}
 
     virtual std::string str() const noexcept override {
         std::ostringstream if_str;
-        if_str << "IfStmt(test=" << test->str() << ",body=" << body->str() << ",else_body=" << else_body->str() << ")";
+        if_str << "IfStmt(test=" << test->str() << ",body=" << body->str() << ",else_body=" << or_else->str() << ")";
         return if_str.str();
     }
 
     virtual std::vector<Node *> getChildren() const override {
-        return {test, body, else_body};
+        return {test, body, or_else};
     }
 
     Node *test;
     Node *body;
-    Node *else_body;
+    Node *or_else;
 };
 
 struct Import : public Node {
@@ -557,6 +575,7 @@ struct AugAssign : public Node {
     Node *value;
 };
 
+
 struct AnnAssign : public Node {
     explicit AnnAssign(Node *target, Node *annotation, Node *value)
             : target(target), annotation(annotation), value(value) {}
@@ -595,6 +614,16 @@ struct StarredExpr : public Node {
 
     Node *expr;
 };
+
+struct WhileStmt : public Node {
+    explicit WhileStmt(Node *test, Node *body, Node *or_else)
+            : test(test), body(body), or_else(or_else) {}
+
+    Node *test;
+    Node *body;
+    Node *or_else;
+};
+
 
 struct Raise : public Node {
     explicit Raise(Node *exception, Node *from)
