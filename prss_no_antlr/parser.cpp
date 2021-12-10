@@ -296,8 +296,10 @@ Aliases *parseDottedAsNames(PyLexer &lexer) {
     return aliases;
 }
 
-IfStmt* parseIfStmt(PyLexer &lexer) {
-    lexer.consume(Python3Lexer::IF);
+IfStmt* parseIfStmt(PyLexer &lexer, int32_t depth) {
+    if (depth == 0) {
+        lexer.consume(Python3Lexer::IF);
+    }
     auto if_stmt = new IfStmt(nullptr, nullptr, nullptr);
 
     if_stmt->test = parseTest(lexer);
@@ -307,13 +309,14 @@ IfStmt* parseIfStmt(PyLexer &lexer) {
 
     while (lexer.curr->getType() == Python3Lexer::ELIF) {
         lexer.consume(Python3Lexer::ELIF);
-        if_stmt->or_else = parseIfStmt(lexer);
+        if_stmt->or_else = parseIfStmt(lexer, depth+1);
     }
 
     if (lexer.curr->getType() == Python3Lexer::ELSE) {
         lexer.consume(Python3Lexer::ELSE);
         lexer.consume(Python3Lexer::COLON);
-        if_stmt->or_else = parseIfStmt(lexer);
+
+        if_stmt->or_else = parseSuite(lexer);
     }
 
     return if_stmt;
@@ -355,6 +358,48 @@ Aliases *parseImportAsNames(PyLexer &lexer) {
 }
 
 Node *parseStmt(PyLexer &lexer) {
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::IF:
+        case Python3Lexer::WHILE:
+        case Python3Lexer::FOR:
+        case Python3Lexer::TRY:
+        case Python3Lexer::WITH:
+        case Python3Lexer::DEF:
+        case Python3Lexer::CLASS:
+        case Python3Lexer::AT:
+        case Python3Lexer::ASYNC:
+            return parseCompoundStmt(lexer);
+        default:
+            return parseSimpleStmt(lexer);
+    }
+}
+
+
+Node *parseCompoundStmt(PyLexer &lexer) {
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::IF:
+            return parseIfStmt(lexer, 0);
+        case Python3Lexer::WHILE:
+            return parseWhileStmt(lexer);
+        case Python3Lexer::FOR:
+            return parseForStmt(lexer);
+        case Python3Lexer::TRY:
+            return parseTryStmt(lexer);
+        case Python3Lexer::DEF:
+            return parseFuncDef(lexer);
+        case Python3Lexer::CLASS:
+            return parseClassDef(lexer);
+        case Python3Lexer::AT:
+            return parseDecorated(lexer);
+        case Python3Lexer::ASYNC:
+            return parseAsyncStmt(lexer);
+        default:
+            ERR_MSG("expected IF, WHILE, FOR, TRY, DEF, CLASS, AT or ASYNC");
+            exit(1);
+    }
+}
+
+ClassDef *parseClassDef(PyLexer &lexer) {
     return nullptr;
 }
 
@@ -480,7 +525,8 @@ TestList *parseTestList(PyLexer &lexer) {
 
 WhileStmt *parseWhileStmt(PyLexer &lexer) {
     lexer.consume(Python3Lexer::WHILE);
-    auto
+
+    return nullptr;
 }
 
 
@@ -497,6 +543,18 @@ Argument *parseArgument(PyLexer &lexer) {
     return node;
 }
 
+TryStmt *parseTryStmt(PyLexer &lexer) {
+    return nullptr;
+}
+
+Node *parseDecorated(PyLexer &lexer) {
+    return nullptr;
+}
+
+Node *parseAsyncStmt(PyLexer &lexer) {
+    return nullptr;
+}
+
 Node *parseOrTest(PyLexer &lexer) {
     auto node = parseAndTest(lexer);
 
@@ -508,6 +566,10 @@ Node *parseOrTest(PyLexer &lexer) {
     }
 
     return node;
+}
+
+ForStmt *parseForStmt(PyLexer &lexer) {
+    return nullptr;
 }
 
 Node *parseAndTest(PyLexer &lexer) {
@@ -896,7 +958,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseIfStmt(lexer);
+    return parseIfStmt(lexer, 0);
 }
 
 void destroyAst(Node *root) {

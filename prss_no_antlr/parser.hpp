@@ -33,6 +33,8 @@ struct Module;
 struct CallFunc;
 struct SimpleStmt;
 struct FuncDef;
+struct ClassDef;
+struct AsyncFuncDef;
 struct BinOp;
 struct UnaryOp;
 struct BoolOp;
@@ -51,6 +53,7 @@ struct Break;
 struct Alias;
 struct Aliases;
 struct Continue;
+struct TestList;
 struct Return;
 struct Const;
 struct Argument;
@@ -58,13 +61,11 @@ struct Arguments;
 struct Global;
 struct Assert;
 struct Nonlocal;
-struct TestList;
 struct IfStmt;
 struct WhileStmt;
 struct ForStmt;
 struct TryStmt;
 struct WithStmt;
-struct ClassDef;
 
 struct Delete;
 
@@ -121,7 +122,11 @@ Argument *parseArgument(PyLexer &lexer);
 
 Arguments *parseParameters(PyLexer &lexer);
 
+Node *parseAsyncStmt(PyLexer &lexer);
+
 FuncDef *parseFuncDef(PyLexer &lexer);
+
+ClassDef *parseClassDef(PyLexer &lexer);
 
 Node *parseSuite(PyLexer &lexer);
 
@@ -139,7 +144,7 @@ ImportFrom *parseImportFrom(PyLexer &lexer);
 
 Alias *parseImportAsName(PyLexer &lexer);
 
-IfStmt *parseIfStmt(PyLexer &lexer);
+IfStmt *parseIfStmt(PyLexer &lexer, int32_t depth);
 
 WhileStmt *parseWhileStmt(PyLexer &lexer);
 
@@ -166,6 +171,9 @@ Delete *parseDelStmt(PyLexer &lexer);
 Pass *parsePassStmt(PyLexer &lexer);
 
 Name *parseDottedName(PyLexer &lexer);
+
+Node *parseDecorated(PyLexer &lexer);
+
 
 Alias *parseDottedAsName(PyLexer &lexer);
 
@@ -488,6 +496,13 @@ struct SimpleStmt : public Node {
     std::vector<Node *> small_stmts;
 };
 
+struct ForStmt : public Node {
+    explicit ForStmt() {}
+};
+
+struct TryStmt : public Node {
+};
+
 struct ExprList : public Node {
     explicit ExprList(const std::vector<Node *> &expr_list)
             : expr_list(expr_list) {}
@@ -499,13 +514,17 @@ struct Test : public Node {
     explicit Test();
 };
 
+struct ClassDef : public Node {
+    explicit ClassDef() {}
+};
+
 struct IfStmt : public Node {
     explicit IfStmt(Node *test, Node *body, Node *or_else)
             : test(test), body(body), or_else(or_else) {}
 
     virtual std::string str() const noexcept override {
         std::ostringstream if_str;
-        if_str << "IfStmt(test=" << test->str() << ",body=" << body->str() << ",else_body=" << or_else->str() << ")";
+        if_str << "IfStmt(test=" << test->str() << ",body=" << body->str() << ",or_else=" << or_else->str() << ")";
         return if_str.str();
     }
 
@@ -538,7 +557,11 @@ struct Return : public Node {
     explicit Return(TestList *test_list)
             : test_list(test_list) {}
 
-    // TODO(threadedstream): add str() method
+    virtual std::string str() const noexcept override {
+        std::ostringstream return_str;
+        return_str << "Return(expr=" << test_list->str() << ")";
+    }
+
     TestList *test_list;
 };
 
@@ -554,6 +577,13 @@ struct TestList : public Node {
     explicit TestList(const std::vector<Node *> &nodes)
             : nodes(nodes) {}
 
+    virtual std::string str() const noexcept override {
+        std::ostringstream test_list_str;
+        for (const auto node : nodes) {
+            test_list_str << node->str();
+        }
+        return test_list_str.str();
+    }
 
     std::vector<Node *> nodes;
 };
@@ -666,7 +696,7 @@ struct Const : public Node {
 
     std::string str() const noexcept override {
         std::ostringstream const_str;
-        const_str << "Const(value=" << value << ",type=" << tok_utils::tokTypeToStr[type];
+        const_str << "Const(value=" << value << ",type=" << tok_utils::tokTypeToStr[type] << ")";
         return const_str.str();
     }
 
