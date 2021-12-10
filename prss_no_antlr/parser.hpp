@@ -58,6 +58,10 @@ struct Return;
 struct Const;
 struct Argument;
 struct Arguments;
+struct DictComp;
+struct SetComp;
+struct Dict;
+struct Set;
 struct Global;
 struct Assert;
 struct Nonlocal;
@@ -138,6 +142,8 @@ Node *parseImportStmt(PyLexer &lexer);
 
 Import *parseImportName(PyLexer &lexer);
 
+Node *parseTestlistComp(PyLexer &lexer);
+
 Node *parseCompoundStmt(PyLexer &lexer);
 
 ImportFrom *parseImportFrom(PyLexer &lexer);
@@ -164,6 +170,14 @@ Node *parseYieldExpr(PyLexer &lexer);
 
 Node *parseExprStmt(PyLexer &lexer);
 
+Node *parseCompIter(PyLexer &lexer);
+
+Node *parseCompFor(PyLexer &lexer);
+
+Node *parseCompIf(PyLexer &lexer);
+
+Node *parseDictorsetmaker(PyLexer &lexer);
+
 AnnAssign *parseAnnAssign(PyLexer &lexer);
 
 Delete *parseDelStmt(PyLexer &lexer);
@@ -173,7 +187,6 @@ Pass *parsePassStmt(PyLexer &lexer);
 Name *parseDottedName(PyLexer &lexer);
 
 Node *parseDecorated(PyLexer &lexer);
-
 
 Alias *parseDottedAsName(PyLexer &lexer);
 
@@ -414,6 +427,26 @@ inline bool isTermOp(const Token *tok) {
            token_type == Python3Lexer::MOD;
 }
 
+inline bool isTestlistComp(const Token *tok) {
+    const auto token_type = tok->getType();
+    return token_type == Python3Lexer::STRING ||
+           token_type == Python3Lexer::NUMBER ||
+           token_type == Python3Lexer::LAMBDA ||
+           token_type == Python3Lexer::NOT ||
+           token_type == Python3Lexer::NONE ||
+           token_type == Python3Lexer::TRUE ||
+           token_type == Python3Lexer::FALSE ||
+           token_type == Python3Lexer::AWAIT ||
+           token_type == Python3Lexer::ELLIPSIS ||
+           token_type == Python3Lexer::STAR ||
+           token_type == Python3Lexer::OPEN_PAREN ||
+           token_type == Python3Lexer::OPEN_BRACK ||
+           token_type == Python3Lexer::ADD ||
+           token_type == Python3Lexer::MINUS ||
+           token_type == Python3Lexer::NOT_OP ||
+           token_type == Python3Lexer::OPEN_BRACE;
+}
+
 inline bool isCompOp(PyLexer &lexer) {
     if (!lexer.curr || !lexer.next) {
         return false;
@@ -507,6 +540,10 @@ struct ExprList : public Node {
     explicit ExprList(const std::vector<Node *> &expr_list)
             : expr_list(expr_list) {}
 
+    virtual std::string str() const noexcept override {
+        return "";
+    }
+
     std::vector<Node *> expr_list;
 };
 
@@ -541,6 +578,10 @@ struct Import : public Node {
     explicit Import(Aliases *aliases)
             : aliases(aliases) {}
 
+    virtual std::vector<Node *> getChildren() const override {
+        return {reinterpret_cast<Node *>(aliases)};
+    }
+
     Aliases *aliases;
 };
 
@@ -553,13 +594,31 @@ struct ImportFrom : public Node {
     int32_t level;
 };
 
+struct TestList : public Node {
+    explicit TestList(const std::vector<Node *> &nodes)
+            : nodes(nodes) {}
+
+    virtual std::string str() const noexcept override {
+        std::ostringstream test_list_str;
+        for (const auto node: nodes) {
+            test_list_str << node->str();
+        }
+        return test_list_str.str();
+    }
+
+    std::vector<Node *> nodes;
+};
+
+
 struct Return : public Node {
     explicit Return(TestList *test_list)
             : test_list(test_list) {}
 
+
     virtual std::string str() const noexcept override {
         std::ostringstream return_str;
         return_str << "Return(expr=" << test_list->str() << ")";
+        return return_str.str();
     }
 
     TestList *test_list;
@@ -571,21 +630,6 @@ struct Break : public Node {
 
 struct Continue : public Node {
     Continue() {}
-};
-
-struct TestList : public Node {
-    explicit TestList(const std::vector<Node *> &nodes)
-            : nodes(nodes) {}
-
-    virtual std::string str() const noexcept override {
-        std::ostringstream test_list_str;
-        for (const auto node : nodes) {
-            test_list_str << node->str();
-        }
-        return test_list_str.str();
-    }
-
-    std::vector<Node *> nodes;
 };
 
 struct Assign : public Node {
@@ -648,6 +692,7 @@ struct StarredExpr : public Node {
 struct WhileStmt : public Node {
     explicit WhileStmt(Node *test, Node *body, Node *or_else)
             : test(test), body(body), or_else(or_else) {}
+
 
     Node *test;
     Node *body;

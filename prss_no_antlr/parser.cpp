@@ -322,7 +322,20 @@ IfStmt* parseIfStmt(PyLexer &lexer, int32_t depth) {
     return if_stmt;
 }
 
+WhileStmt *parseWhileStmt(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::WHILE);
+    auto while_stmt = new WhileStmt(nullptr, nullptr, nullptr);
+    while_stmt->test = parseTest(lexer);
+    lexer.consume(Python3Lexer::COLON);
+    while_stmt->body = parseSuite(lexer);
+    if (lexer.curr->getType() == Python3Lexer::ELSE) {
+        lexer.consume(Python3Lexer::ELSE);
+        lexer.consume(Python3Lexer::COLON);
+        while_stmt->or_else = parseSuite(lexer);
+    }
 
+    return while_stmt;
+}
 
 Alias *parseImportAsName(PyLexer &lexer) {
     auto alias = new Alias(nullptr, nullptr);
@@ -374,6 +387,21 @@ Node *parseStmt(PyLexer &lexer) {
     }
 }
 
+Node *parseCompIter(PyLexer &lexer) {
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::IF:
+            return parseCompIf(lexer);
+        case Python3Lexer::FOR:
+            return parseCompFor(lexer);
+        default:
+            // handle (ASYNC)? 'for'
+            if (lexer.curr->getType() == Python3Lexer::Python3Lexer::ASYNC &&
+                lexer.next && lexer.next->getType() == Python3Lexer::FOR) {
+
+                return parseCompFor(lexer);
+            }
+    }
+}
 
 Node *parseCompoundStmt(PyLexer &lexer) {
     switch (lexer.curr->getType()) {
@@ -522,13 +550,6 @@ TestList *parseTestList(PyLexer &lexer) {
 
     return test_list;
 }
-
-WhileStmt *parseWhileStmt(PyLexer &lexer) {
-    lexer.consume(Python3Lexer::WHILE);
-
-    return nullptr;
-}
-
 
 Argument *parseArgument(PyLexer &lexer) {
     const auto current_token = lexer.curr;
@@ -877,10 +898,33 @@ Node *parseAtomExpr(PyLexer &lexer) {
     return parseAtom(lexer);
 }
 
+Node *parseTestlistComp(PyLexer &lexer) {
+    return nullptr;
+}
+
 Node *parseAtom(PyLexer &lexer) {
+    Node *node;
     const auto current_token = lexer.curr;
     switch (current_token->getType()) {
-        // only numbers for now
+        case Python3Lexer::OPEN_PAREN: {
+            lexer.consume(Python3Lexer::OPEN_PAREN);
+            switch (lexer.curr->getType()) {
+                case Python3Lexer::YIELD:
+                    node = parseYieldExpr(lexer);
+                    break;
+                default: {
+                    if (isTestlistComp(lexer.curr))
+                        node = parseTestlistComp(lexer);
+                }break;
+            }
+            lexer.consume(Python3Lexer::CLOSE_PAREN);
+        }break;
+        case Python3Lexer::OPEN_BRACK: {
+            lexer.consume(Python3Lexer::OPEN_BRACK);
+            if (isTestlistComp(lexer.curr))
+                node = parseTestlistComp(lexer);
+            lexer.consume(Python3Lexer::CLOSE_BRACK);
+        }break;
         case Python3Lexer::NUMBER:
             lexer.consume(Python3Lexer::NUMBER);
             return new Const(current_token->getText(), Python3Lexer::NUMBER);
@@ -893,6 +937,71 @@ Node *parseAtom(PyLexer &lexer) {
         default:
             return nullptr;
     }
+}
+
+Node *parseCompFor(PyLexer &lexer) {
+    if (lexer.curr->getType() == Python3Lexer::ASYNC) {
+        lexer.consume(Python3Lexer::ASYNC);
+        // TODO(threadedstream): please, handle all async cases
+    }
+
+    lexer.consume(Python3Lexer::FOR);
+    const auto expr_list = parseExprList(lexer);
+
+    lexer.consume(Python3Lexer::IN);
+    const auto or_test = parseOrTest(lexer);
+
+    Node *temp;
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::IF:
+        case Python3Lexer::FOR:
+            temp = parseCompIter(lexer);
+            break;
+        default: {
+            if (lexer.curr->getType() == Python3Lexer::ASYNC &&
+                lexer.next && lexer.next->getType() == Python3Lexer::FOR) {
+
+                temp = parseCompIter(lexer);
+            }
+        }break;
+    }
+
+    // TODO(threadedstream): return anything else but nullptr
+    return nullptr;
+}
+
+
+//(
+//  (
+//      (test ':' test | '**' expr)
+//      (comp_for | (',' (test ':' test | '**' expr))* (',')?)
+//  ) |
+//  ((test | star_expr) (comp_for | (',' (test | star_expr))* (',')?))
+// );
+Node *parseDictorsetmaker(PyLexer &lexer) {
+
+    Node *node;
+
+    // parse dicts
+    if (lexer.curr->getType() == Python3Lexer::POWER) {
+        lexer.consume(Python3Lexer::POWER);
+        const auto expr = parseExpr(lexer);
+    } else {
+        const auto key = parseTest(lexer);
+        lexer.consume(Python3Lexer::COLON);
+        const auto value = parseTest(lexer);
+    }
+
+    if ((lexer.curr->getType() == Python3Lexer::ASYNC &&
+        lexer.next && lexer.next->getType() == Python3Lexer::FOR) ||
+        lexer.curr->getType() == Python3Lexer::FOR) {
+
+        const auto comp_for = parseCompFor(lexer);
+    } else if (lexer.curr->getType() == Python3Lexer::COMMA) {
+        while (lexer.curr->getType() == Python3Lexer::COMMA) {
+        }
+    }
+
 }
 
 Node *parseTrailer(PyLexer &lexer) {
@@ -958,7 +1067,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseIfStmt(lexer, 0);
+    return parseWhileStmt(lexer);
 }
 
 void destroyAst(Node *root) {

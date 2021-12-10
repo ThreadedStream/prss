@@ -1,8 +1,4 @@
-if x < 5:
-    return x
-elif y > 7:
-    return y
-elif y < 15:
-    return z
+while x < 5:
+    print('hello, gentleman')
 else:
-    return w
+    print('hi, gentleman')
