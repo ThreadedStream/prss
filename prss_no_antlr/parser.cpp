@@ -236,12 +236,14 @@ ImportFrom *parseImportFrom(PyLexer &lexer) {
         case Python3Lexer::STAR: {
             const auto name = new Name("*");
             import_from->aliases->aliases.push_back(new Alias(name, nullptr));
-        }break;
+        }
+            break;
         case Python3Lexer::OPEN_PAREN: {
             lexer.consume(Python3Lexer::OPEN_PAREN);
             import_from->aliases = parseImportAsNames(lexer);
             lexer.consume(Python3Lexer::CLOSE_PAREN);
-        }break;
+        }
+            break;
         case Python3Lexer::NAME:
             import_from->aliases = parseImportAsNames(lexer);
             break;
@@ -296,7 +298,7 @@ Aliases *parseDottedAsNames(PyLexer &lexer) {
     return aliases;
 }
 
-IfStmt* parseIfStmt(PyLexer &lexer, int32_t depth) {
+IfStmt *parseIfStmt(PyLexer &lexer, int32_t depth) {
     if (depth == 0) {
         lexer.consume(Python3Lexer::IF);
     }
@@ -309,7 +311,7 @@ IfStmt* parseIfStmt(PyLexer &lexer, int32_t depth) {
 
     while (lexer.curr->getType() == Python3Lexer::ELIF) {
         lexer.consume(Python3Lexer::ELIF);
-        if_stmt->or_else = parseIfStmt(lexer, depth+1);
+        if_stmt->or_else = parseIfStmt(lexer, depth + 1);
     }
 
     if (lexer.curr->getType() == Python3Lexer::ELSE) {
@@ -386,6 +388,22 @@ Node *parseStmt(PyLexer &lexer) {
             return parseSimpleStmt(lexer);
     }
 }
+
+Node *parseCompIf(PyLexer &lexer) {
+    lexer.consume(Python3Lexer::IF);
+
+    const auto test_no_cond = parseTestNoCond(lexer);
+
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::IF:
+        case Python3Lexer::ASYNC:
+        case Python3Lexer::FOR:
+            const auto comp_iter = parseCompIter(lexer);
+    }
+
+    return nullptr;
+}
+
 
 Node *parseCompIter(PyLexer &lexer) {
     switch (lexer.curr->getType()) {
@@ -472,6 +490,36 @@ Continue *parseContinueStmt(PyLexer &lexer) {
     lexer.consume(Python3Lexer::CONTINUE);
     auto node = new Continue();
     return node;
+}
+
+Node *parseTestNoCond(PyLexer &lexer) {
+    switch (lexer.curr->getType()) {
+        case Python3Parser::STRING:
+        case Python3Parser::NUMBER:
+        case Python3Parser::NOT:
+        case Python3Parser::NONE:
+        case Python3Parser::TRUE:
+        case Python3Parser::FALSE:
+        case Python3Parser::AWAIT:
+        case Python3Parser::NAME:
+        case Python3Parser::ELLIPSIS:
+        case Python3Parser::OPEN_PAREN:
+        case Python3Parser::OPEN_BRACK:
+        case Python3Parser::ADD:
+        case Python3Parser::MINUS:
+        case Python3Parser::NOT_OP:
+        case Python3Parser::OPEN_BRACE: {
+            return parseOrTest(lexer);
+        }
+        case Python3Lexer::LAMBDA:
+            return parseLambDefNoCond(lexer);
+        default:
+            ERR_MSG("")
+    }
+}
+
+Node *parseLambdefNoCond(PyLexer &lexer) {
+    return nullptr;
 }
 
 TestList *parseTestlist(PyLexer &lexer) {
@@ -915,16 +963,19 @@ Node *parseAtom(PyLexer &lexer) {
                 default: {
                     if (isTestlistComp(lexer.curr))
                         node = parseTestlistComp(lexer);
-                }break;
+                }
+                    break;
             }
             lexer.consume(Python3Lexer::CLOSE_PAREN);
-        }break;
+        }
+            break;
         case Python3Lexer::OPEN_BRACK: {
             lexer.consume(Python3Lexer::OPEN_BRACK);
             if (isTestlistComp(lexer.curr))
                 node = parseTestlistComp(lexer);
             lexer.consume(Python3Lexer::CLOSE_BRACK);
-        }break;
+        }
+            break;
         case Python3Lexer::NUMBER:
             lexer.consume(Python3Lexer::NUMBER);
             return new Const(current_token->getText(), Python3Lexer::NUMBER);
@@ -939,17 +990,20 @@ Node *parseAtom(PyLexer &lexer) {
     }
 }
 
+
 Node *parseCompFor(PyLexer &lexer) {
+    auto comp_for = new Comprehension(nullptr, nullptr, {}, false);
     if (lexer.curr->getType() == Python3Lexer::ASYNC) {
         lexer.consume(Python3Lexer::ASYNC);
         // TODO(threadedstream): please, handle all async cases
+        comp_for->is_async = true;
     }
 
     lexer.consume(Python3Lexer::FOR);
-    const auto expr_list = parseExprList(lexer);
+    comp_for->target = parseExprList(lexer);
 
     lexer.consume(Python3Lexer::IN);
-    const auto or_test = parseOrTest(lexer);
+    comp_for->iter = parseOrTest(lexer);
 
     Node *temp;
     switch (lexer.curr->getType()) {
@@ -963,13 +1017,29 @@ Node *parseCompFor(PyLexer &lexer) {
 
                 temp = parseCompIter(lexer);
             }
-        }break;
+        }
+            break;
     }
 
     // TODO(threadedstream): return anything else but nullptr
     return nullptr;
 }
 
+Node *parseDict(PyLexer &lexer) {
+    Node *dict;
+
+    const auto key = parseTest(lexer);
+    lexer.consume(Python3Lexer::COLON);
+    const auto value = parseTest(lexer);
+
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::ASYNC:
+        case Python3Lexer::FOR: {
+            const auto comprehension = parseCompFor(lexer);
+        }
+    }
+
+}
 
 //(
 //  (
@@ -982,6 +1052,50 @@ Node *parseDictorsetmaker(PyLexer &lexer) {
 
     Node *node;
 
+
+    switch (lexer.curr->getType()) {
+        case Python3Parser::STRING:
+        case Python3Parser::NUMBER:
+        case Python3Parser::LAMBDA:
+        case Python3Parser::NOT:
+        case Python3Parser::NONE:
+        case Python3Parser::TRUE:
+        case Python3Parser::FALSE:
+        case Python3Parser::AWAIT:
+        case Python3Parser::NAME:
+        case Python3Parser::ELLIPSIS:
+        case Python3Parser::OPEN_PAREN:
+        case Python3Parser::OPEN_BRACK:
+        case Python3Parser::ADD:
+        case Python3Parser::MINUS:
+        case Python3Parser::NOT_OP:
+        case Python3Parser::OPEN_BRACE: {
+            return parseDict(lexer);
+        }
+
+        case Python3Lexer::POWER: {
+            lexer.consume(Python3Lexer::POWER);
+            const auto expr = parseExpr(lexer);
+        }
+            break;
+        default: {
+            ERR_MSG("Expected TEST or POWER");
+            exit(1);
+        }
+            break;
+    }
+
+    switch (lexer.curr->getType()) {
+        case Python3Lexer::FOR:
+        case Python3Lexer::ASYNC:
+            const auto comp_for = parseCompFor(lexer);
+            break;
+        case Python3Lexer::COMMA:
+        case Python3Lexer::CLOSE_BRACE: {
+
+        }
+    }
+
     // parse dicts
     if (lexer.curr->getType() == Python3Lexer::POWER) {
         lexer.consume(Python3Lexer::POWER);
@@ -993,12 +1107,13 @@ Node *parseDictorsetmaker(PyLexer &lexer) {
     }
 
     if ((lexer.curr->getType() == Python3Lexer::ASYNC &&
-        lexer.next && lexer.next->getType() == Python3Lexer::FOR) ||
+         lexer.next && lexer.next->getType() == Python3Lexer::FOR) ||
         lexer.curr->getType() == Python3Lexer::FOR) {
 
         const auto comp_for = parseCompFor(lexer);
     } else if (lexer.curr->getType() == Python3Lexer::COMMA) {
         while (lexer.curr->getType() == Python3Lexer::COMMA) {
+
         }
     }
 

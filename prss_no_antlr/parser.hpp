@@ -44,6 +44,7 @@ struct AnnAssign;
 struct StarredExpr;
 struct Pass;
 struct Yield;
+struct Comprehension;
 struct YieldFrom;
 struct ExprList;
 struct Import;
@@ -114,6 +115,7 @@ Node *parseLambDef(PyLexer &lexer);
 
 Node *parseLambDefNoCond(PyLexer &lexer);
 
+
 Node *parseOrTest(PyLexer &lexer);
 
 Node *parseAndTest(PyLexer &lexer);
@@ -141,6 +143,8 @@ Node *parseSimpleStmt(PyLexer &lexer);
 Node *parseImportStmt(PyLexer &lexer);
 
 Import *parseImportName(PyLexer &lexer);
+
+Node *parseTestNoCond(PyLexer &lexer);
 
 Node *parseTestlistComp(PyLexer &lexer);
 
@@ -187,6 +191,10 @@ Pass *parsePassStmt(PyLexer &lexer);
 Name *parseDottedName(PyLexer &lexer);
 
 Node *parseDecorated(PyLexer &lexer);
+
+Node *parseDict(PyLexer &lexer);
+
+Node *parseSet(PyLexer &lexer);
 
 Alias *parseDottedAsName(PyLexer &lexer);
 
@@ -496,6 +504,33 @@ struct Module : public Node {
 
     Node *expr;
     std::string doc;
+};
+
+struct Comprehension : public Node {
+    explicit Comprehension(Node *target, Node *iter, std::vector<IfStmt *> ifs, bool is_async)
+            : target(target), iter(iter), ifs(ifs), is_async(is_async) {}
+
+    Node *target;
+    Node *iter;
+    std::vector<IfStmt *> ifs;
+    bool is_async;
+};
+
+struct Dict : public Node {
+    explicit Dict(std::vector<Node *> keys, std::vector<Node *> values)
+            : keys(keys), values(values) {}
+
+    std::vector<Node *> keys;
+    std::vector<Node *> values;
+};
+
+struct DictComp : public Node {
+    explicit DictComp(Node *key, Node *value, std::vector<Node *> generators)
+            : key(key), value(value), generators(generators) {}
+
+    Node *key;
+    Node *value;
+    std::vector<Node *> generators;
 };
 
 struct Stmt : public Node {

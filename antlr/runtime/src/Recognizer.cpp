@@ -109,6 +109,7 @@ std::string Recognizer::getTokenErrorDisplay(Token *t) {
   if (t == nullptr) {
     return "<no Token>";
   }
+
   std::string s = t->getText();
   if (s == "") {
     if (t->getType() == EOF) {
