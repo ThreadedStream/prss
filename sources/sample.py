@@ -1,4 +1,1 @@
-while x < 5:
-    print('hello, gentleman')
-else:
-    print('hi, gentleman')
+x = {z : y for y in range(6)}

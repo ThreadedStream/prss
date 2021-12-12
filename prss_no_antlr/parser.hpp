@@ -12,10 +12,10 @@
 #include "antlr4-runtime.h"
 #include "Python3Lexer.h"
 
-
 #define ERR_TOK(expected_token_type) fprintf(stderr, "expected token %d", expected_token_type)
-
 #define ERR_MSG(message) fprintf(stderr, message)
+#define ERR_MSG_EXIT(message) ERR_MSG(message); exit(1)
+//#define ERR_MSG_CLEANUP_EXIT(message) ERR_MSG(message); destroyAst()
 
 template<typename T>
 using opt = std::optional<T>;
@@ -54,6 +54,7 @@ struct Break;
 struct Alias;
 struct Aliases;
 struct Continue;
+struct Attribute;
 struct TestList;
 struct Return;
 struct Const;
@@ -75,6 +76,14 @@ struct WithStmt;
 struct Delete;
 
 class PyLexer;
+
+// TODO(threadedstream): This is a quick note on how to parse the terminal COMMA symbols taking place after series of exprs separated by comma
+// For instance, let's take the following rule: (expr|star_expr) (',' (expr|star_expr))* (',')?
+// Here, expr or star_expr is followed by series of exprs or star_exprs separated by comma.
+// The problem is that there's a terminal comma located at the end of the rule.
+// I guess this comma could be easily caught should i added more verbosity when parsing
+// abovementioned sequence, i.e there, in a loop, should be a gigantic (or not so) switch statement
+// deciding which way to go next, and breaking the loop in case if no pattern was found, i.e executing "default:" branch.
 
 
 int32_t astNumNodes(Node *node);
@@ -114,7 +123,6 @@ TestList *parseTestlistStarExpr(PyLexer &lexer);
 Node *parseLambDef(PyLexer &lexer);
 
 Node *parseLambDefNoCond(PyLexer &lexer);
-
 
 Node *parseOrTest(PyLexer &lexer);
 
@@ -589,6 +597,19 @@ struct Test : public Node {
 struct ClassDef : public Node {
     explicit ClassDef() {}
 };
+
+struct Attribute : public Node {
+    explicit Attribute(Node *value, Node *attr)
+            : value(value), attr(attr) {}
+
+    virtual std::vector<Node *> getChildren() const override {
+        return {value, attr};
+    }
+
+    Node *value;
+    Node *attr;
+};
+
 
 struct IfStmt : public Node {
     explicit IfStmt(Node *test, Node *body, Node *or_else)
