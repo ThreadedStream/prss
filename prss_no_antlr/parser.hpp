@@ -30,7 +30,6 @@ enum class AssignFlag : uint8_t {
 
 struct Node;
 struct Module;
-struct CallFunc;
 struct SimpleStmt;
 struct FuncDef;
 struct ClassDef;
@@ -41,12 +40,15 @@ struct BoolOp;
 struct Name;
 struct Assign;
 struct AnnAssign;
+struct GeneratorExp;
 struct StarredExpr;
 struct Pass;
 struct Yield;
+struct Call;
 struct Comprehension;
 struct YieldFrom;
 struct ExprList;
+struct Keyword;
 struct Import;
 struct ImportFrom;
 struct Raise;
@@ -61,6 +63,8 @@ struct Const;
 struct Argument;
 struct Arguments;
 struct DictComp;
+struct Parameter;
+struct Parameters;
 struct SetComp;
 struct Dict;
 struct Set;
@@ -98,7 +102,7 @@ Node *parseTerm(PyLexer &lexer);
 
 Node *parseArithExpr(PyLexer &lexer);
 
-Arguments *parseTypedArgsList(PyLexer &lexer);
+Parameters *parseTypedArgsList(PyLexer &lexer);
 
 Node *parseComparison(PyLexer &lexer);
 
@@ -132,9 +136,11 @@ Node *parseNotTest(PyLexer &lexer);
 
 Node *parseArgList(PyLexer &lexer);
 
-Argument *parseArgument(PyLexer &lexer);
+Node *parseArgument(PyLexer &lexer);
 
-Arguments *parseParameters(PyLexer &lexer);
+Parameters *parseParameters(PyLexer &lexer);
+
+Parameter *parseParameter(PyLexer &lexer);
 
 Node *parseAsyncStmt(PyLexer &lexer);
 
@@ -234,103 +240,103 @@ void destroyAst(Node *root);
 
 namespace tok_utils {
     static std::map<int32_t, std::string> tokTypeToStr = {
-            {Python3Lexer::STRING,             "TokString"},
-            {Python3Lexer::NUMBER,             "TokNumber"},
-            {Python3Lexer::INTEGER,            "TokInteger"},
-            {Python3Lexer::DEF,                "TokDef"},
-            {Python3Lexer::RETURN,             "TokReturn"},
-            {Python3Lexer::RAISE,              "TokRaise"},
-            {Python3Lexer::FROM,               "TokFrom"},
-            {Python3Lexer::IMPORT,             "TokImport"},
-            {Python3Lexer::AS,                 "TokAs"},
-            {Python3Lexer::GLOBAL,             "TokGlobal"},
-            {Python3Lexer::NONLOCAL,           "TokNonlocal"},
-            {Python3Lexer::ASSERT,             "TokAssert"},
-            {Python3Lexer::IF,                 "TokIf"},
-            {Python3Lexer::ELIF,               "TokElif"},
-            {Python3Lexer::ELSE,               "TokElse"},
-            {Python3Lexer::WHILE,              "TokWhile"},
-            {Python3Lexer::FOR,                "TokFor"},
-            {Python3Lexer::IN,                 "TokIn"},
-            {Python3Lexer::TRY,                "TokTry"},
-            {Python3Lexer::FINALLY,            "TokFinally"},
-            {Python3Lexer::WITH,               "TokWith"},
-            {Python3Lexer::EXCEPT,             "TokExcept"},
-            {Python3Lexer::LAMBDA,             "TokLambda"},
-            {Python3Lexer::OR,                 "TokOr"},
-            {Python3Lexer::AND,                "TokAnd"},
-            {Python3Lexer::NOT,                "TokNot"},
-            {Python3Lexer::IS,                 "TokIs"},
-            {Python3Lexer::NONE,               "TokNone"},
-            {Python3Lexer::TRUE,               "TokTrue"},
-            {Python3Lexer::FALSE,              "TokFalse"},
-            {Python3Lexer::CLASS,              "TokClass"},
-            {Python3Lexer::YIELD,              "TokYield"},
-            {Python3Lexer::DEL,                "TokDel"},
-            {Python3Lexer::PASS,               "TokPass"},
-            {Python3Lexer::CONTINUE,           "TokContinue"},
-            {Python3Lexer::BREAK,              "TokBreak"},
-            {Python3Lexer::ASYNC,              "TokAsync"},
-            {Python3Lexer::AWAIT,              "TokAwait"},
-            {Python3Lexer::NEWLINE,            "TokNewline"},
-            {Python3Lexer::NAME,               "TokName"},
-            {Python3Lexer::STRING_LITERAL,     "TokStringLiteral"},
-            {Python3Lexer::BYTES_LITERAL,      "TokBytesLiteral"},
-            {Python3Lexer::DECIMAL_INTEGER,    "TokDecimalInteger"},
-            {Python3Lexer::OCT_INTEGER,        "TokOctInteger"},
-            {Python3Lexer::HEX_INTEGER,        "TokHexInteger"},
-            {Python3Lexer::BIN_INTEGER,        "TokBigInteger"},
-            {Python3Lexer::FLOAT_NUMBER,       "TokFloatNumber"},
-            {Python3Lexer::IMAG_NUMBER,        "TokImagNumber"},
-            {Python3Lexer::DOT,                "TokDot"},
-            {Python3Lexer::ELLIPSIS,           "TokEllipsis"},
-            {Python3Lexer::STAR,               "TokStar"},
-            {Python3Lexer::OPEN_PAREN,         "TokOpenParen"},
-            {Python3Lexer::CLOSE_PAREN,        "TokCloseParen"},
-            {Python3Lexer::COMMA,              "TokComma"},
-            {Python3Lexer::COLON,              "TokColon"},
-            {Python3Lexer::SEMI_COLON,         "TokSemiColon"},
-            {Python3Lexer::POWER,              "TokPower"},
-            {Python3Lexer::ASSIGN,             "TokAssign"},
-            {Python3Lexer::OPEN_BRACK,         "TokOpenBrack"},
-            {Python3Lexer::CLOSE_BRACK,        "TokCloseBrack"},
-            {Python3Lexer::OR_OP,              "TokOrOp"},
-            {Python3Lexer::XOR,                "TokXor"},
-            {Python3Lexer::AND_OP,             "TokAndOp"},
-            {Python3Lexer::LEFT_SHIFT,         "TokLeftShift"},
-            {Python3Lexer::RIGHT_SHIFT,        "TokRightShift"},
-            {Python3Lexer::ADD,                "TokAdd"},
-            {Python3Lexer::MINUS,              "TokMinus"},
-            {Python3Lexer::DIV,                "TokDiv"},
-            {Python3Lexer::MOD,                "TokMod"},
-            {Python3Lexer::IDIV,               "TokIdiv"},
-            {Python3Lexer::NOT_OP,             "TokNotOp"},
-            {Python3Lexer::OPEN_BRACE,         "TokOpenBrace"},
-            {Python3Lexer::CLOSE_BRACE,        "TokCloseBrace"},
-            {Python3Lexer::LESS_THAN,          "TokLessThan"},
-            {Python3Lexer::GREATER_THAN,       "TokGreaterThan"},
-            {Python3Lexer::EQUALS,             "TokEquals"},
-            {Python3Lexer::GT_EQ,              "TokGtEq"},
-            {Python3Lexer::LT_EQ,              "TokLtEq"},
-            {Python3Lexer::NOT_EQ_1,           "TokNotEq1"},
-            {Python3Lexer::NOT_EQ_2,           "TokNotEq2"},
-            {Python3Lexer::AT,                 "TokAt"},
-            {Python3Lexer::ARROW,              "TokArrow"},
-            {Python3Lexer::ADD_ASSIGN,         "TokAddAssign"},
-            {Python3Lexer::SUB_ASSIGN,         "TokSubAssign"},
-            {Python3Lexer::MULT_ASSIGN,        "TokMultAssign"},
-            {Python3Lexer::AT_ASSIGN,          "TokAtAssign"},
-            {Python3Lexer::DIV_ASSIGN,         "TokDivAssign"},
-            {Python3Lexer::MOD_ASSIGN,         "TokModAssign"},
-            {Python3Lexer::AND_ASSIGN,         "TokAndAssign"},
-            {Python3Lexer::OR_ASSIGN,          "TokOrAssign"},
-            {Python3Lexer::XOR_ASSIGN,         "TokXorAssign"},
-            {Python3Lexer::LEFT_SHIFT_ASSIGN,  "TokLeftShiftAssign"},
-            {Python3Lexer::RIGHT_SHIFT_ASSIGN, "TokRightShiftAssign"},
-            {Python3Lexer::POWER_ASSIGN,       "TokPowerAssign"},
-            {Python3Lexer::IDIV_ASSIGN,        "TokIDivAssign"},
-            {Python3Lexer::SKIP_,              "TokSkip"},
-            {Python3Lexer::UNKNOWN_CHAR,       "TokUnknownChar"}
+            {Python3Parser::STRING,             "TokString"},
+            {Python3Parser::NUMBER,             "TokNumber"},
+            {Python3Parser::INTEGER,            "TokInteger"},
+            {Python3Parser::DEF,                "TokDef"},
+            {Python3Parser::RETURN,             "TokReturn"},
+            {Python3Parser::RAISE,              "TokRaise"},
+            {Python3Parser::FROM,               "TokFrom"},
+            {Python3Parser::IMPORT,             "TokImport"},
+            {Python3Parser::AS,                 "TokAs"},
+            {Python3Parser::GLOBAL,             "TokGlobal"},
+            {Python3Parser::NONLOCAL,           "TokNonlocal"},
+            {Python3Parser::ASSERT,             "TokAssert"},
+            {Python3Parser::IF,                 "TokIf"},
+            {Python3Parser::ELIF,               "TokElif"},
+            {Python3Parser::ELSE,               "TokElse"},
+            {Python3Parser::WHILE,              "TokWhile"},
+            {Python3Parser::FOR,                "TokFor"},
+            {Python3Parser::IN,                 "TokIn"},
+            {Python3Parser::TRY,                "TokTry"},
+            {Python3Parser::FINALLY,            "TokFinally"},
+            {Python3Parser::WITH,               "TokWith"},
+            {Python3Parser::EXCEPT,             "TokExcept"},
+            {Python3Parser::LAMBDA,             "TokLambda"},
+            {Python3Parser::OR,                 "TokOr"},
+            {Python3Parser::AND,                "TokAnd"},
+            {Python3Parser::NOT,                "TokNot"},
+            {Python3Parser::IS,                 "TokIs"},
+            {Python3Parser::NONE,               "TokNone"},
+            {Python3Parser::TRUE,               "TokTrue"},
+            {Python3Parser::FALSE,              "TokFalse"},
+            {Python3Parser::CLASS,              "TokClass"},
+            {Python3Parser::YIELD,              "TokYield"},
+            {Python3Parser::DEL,                "TokDel"},
+            {Python3Parser::PASS,               "TokPass"},
+            {Python3Parser::CONTINUE,           "TokContinue"},
+            {Python3Parser::BREAK,              "TokBreak"},
+            {Python3Parser::ASYNC,              "TokAsync"},
+            {Python3Parser::AWAIT,              "TokAwait"},
+            {Python3Parser::NEWLINE,            "TokNewline"},
+            {Python3Parser::NAME,               "TokName"},
+            {Python3Parser::STRING_LITERAL,     "TokStringLiteral"},
+            {Python3Parser::BYTES_LITERAL,      "TokBytesLiteral"},
+            {Python3Parser::DECIMAL_INTEGER,    "TokDecimalInteger"},
+            {Python3Parser::OCT_INTEGER,        "TokOctInteger"},
+            {Python3Parser::HEX_INTEGER,        "TokHexInteger"},
+            {Python3Parser::BIN_INTEGER,        "TokBigInteger"},
+            {Python3Parser::FLOAT_NUMBER,       "TokFloatNumber"},
+            {Python3Parser::IMAG_NUMBER,        "TokImagNumber"},
+            {Python3Parser::DOT,                "TokDot"},
+            {Python3Parser::ELLIPSIS,           "TokEllipsis"},
+            {Python3Parser::STAR,               "TokStar"},
+            {Python3Parser::OPEN_PAREN,         "TokOpenParen"},
+            {Python3Parser::CLOSE_PAREN,        "TokCloseParen"},
+            {Python3Parser::COMMA,              "TokComma"},
+            {Python3Parser::COLON,              "TokColon"},
+            {Python3Parser::SEMI_COLON,         "TokSemiColon"},
+            {Python3Parser::POWER,              "TokPower"},
+            {Python3Parser::ASSIGN,             "TokAssign"},
+            {Python3Parser::OPEN_BRACK,         "TokOpenBrack"},
+            {Python3Parser::CLOSE_BRACK,        "TokCloseBrack"},
+            {Python3Parser::OR_OP,              "TokOrOp"},
+            {Python3Parser::XOR,                "TokXor"},
+            {Python3Parser::AND_OP,             "TokAndOp"},
+            {Python3Parser::LEFT_SHIFT,         "TokLeftShift"},
+            {Python3Parser::RIGHT_SHIFT,        "TokRightShift"},
+            {Python3Parser::ADD,                "TokAdd"},
+            {Python3Parser::MINUS,              "TokMinus"},
+            {Python3Parser::DIV,                "TokDiv"},
+            {Python3Parser::MOD,                "TokMod"},
+            {Python3Parser::IDIV,               "TokIdiv"},
+            {Python3Parser::NOT_OP,             "TokNotOp"},
+            {Python3Parser::OPEN_BRACE,         "TokOpenBrace"},
+            {Python3Parser::CLOSE_BRACE,        "TokCloseBrace"},
+            {Python3Parser::LESS_THAN,          "TokLessThan"},
+            {Python3Parser::GREATER_THAN,       "TokGreaterThan"},
+            {Python3Parser::EQUALS,             "TokEquals"},
+            {Python3Parser::GT_EQ,              "TokGtEq"},
+            {Python3Parser::LT_EQ,              "TokLtEq"},
+            {Python3Parser::NOT_EQ_1,           "TokNotEq1"},
+            {Python3Parser::NOT_EQ_2,           "TokNotEq2"},
+            {Python3Parser::AT,                 "TokAt"},
+            {Python3Parser::ARROW,              "TokArrow"},
+            {Python3Parser::ADD_ASSIGN,         "TokAddAssign"},
+            {Python3Parser::SUB_ASSIGN,         "TokSubAssign"},
+            {Python3Parser::MULT_ASSIGN,        "TokMultAssign"},
+            {Python3Parser::AT_ASSIGN,          "TokAtAssign"},
+            {Python3Parser::DIV_ASSIGN,         "TokDivAssign"},
+            {Python3Parser::MOD_ASSIGN,         "TokModAssign"},
+            {Python3Parser::AND_ASSIGN,         "TokAndAssign"},
+            {Python3Parser::OR_ASSIGN,          "TokOrAssign"},
+            {Python3Parser::XOR_ASSIGN,         "TokXorAssign"},
+            {Python3Parser::LEFT_SHIFT_ASSIGN,  "TokLeftShiftAssign"},
+            {Python3Parser::RIGHT_SHIFT_ASSIGN, "TokRightShiftAssign"},
+            {Python3Parser::POWER_ASSIGN,       "TokPowerAssign"},
+            {Python3Parser::IDIV_ASSIGN,        "TokIDivAssign"},
+            {Python3Parser::SKIP_,              "TokSkip"},
+            {Python3Parser::UNKNOWN_CHAR,       "TokUnknownChar"}
     };
 
 }
@@ -415,52 +421,52 @@ private:
 inline bool isAugAssign(const Token *tok) {
     const auto token_type = tok->getType();
 
-    return token_type == Python3Lexer::ADD_ASSIGN ||
-           token_type == Python3Lexer::SUB_ASSIGN ||
-           token_type == Python3Lexer::MULT_ASSIGN ||
-           token_type == Python3Lexer::AT_ASSIGN ||
-           token_type == Python3Lexer::DIV_ASSIGN ||
-           token_type == Python3Lexer::MOD_ASSIGN ||
-           token_type == Python3Lexer::AND_ASSIGN ||
-           token_type == Python3Lexer::OR_ASSIGN ||
-           token_type == Python3Lexer::XOR_ASSIGN ||
-           token_type == Python3Lexer::LEFT_SHIFT_ASSIGN ||
-           token_type == Python3Lexer::RIGHT_SHIFT_ASSIGN ||
-           token_type == Python3Lexer::POWER_ASSIGN ||
-           token_type == Python3Lexer::IDIV_ASSIGN;
+    return token_type == Python3Parser::ADD_ASSIGN ||
+           token_type == Python3Parser::SUB_ASSIGN ||
+           token_type == Python3Parser::MULT_ASSIGN ||
+           token_type == Python3Parser::AT_ASSIGN ||
+           token_type == Python3Parser::DIV_ASSIGN ||
+           token_type == Python3Parser::MOD_ASSIGN ||
+           token_type == Python3Parser::AND_ASSIGN ||
+           token_type == Python3Parser::OR_ASSIGN ||
+           token_type == Python3Parser::XOR_ASSIGN ||
+           token_type == Python3Parser::LEFT_SHIFT_ASSIGN ||
+           token_type == Python3Parser::RIGHT_SHIFT_ASSIGN ||
+           token_type == Python3Parser::POWER_ASSIGN ||
+           token_type == Python3Parser::IDIV_ASSIGN;
 }
 
 inline bool isArithOp(const Token *tok) {
     const auto token_type = tok->getType();
-    return token_type == Python3Lexer::ADD || token_type == Python3Lexer::MINUS;
+    return token_type == Python3Parser::ADD || token_type == Python3Parser::MINUS;
 }
 
 inline bool isTermOp(const Token *tok) {
     const auto token_type = tok->getType();
-    return token_type == Python3Lexer::STAR ||
-           token_type == Python3Lexer::DIV ||
-           token_type == Python3Lexer::IDIV ||
-           token_type == Python3Lexer::MOD;
+    return token_type == Python3Parser::STAR ||
+           token_type == Python3Parser::DIV ||
+           token_type == Python3Parser::IDIV ||
+           token_type == Python3Parser::MOD;
 }
 
 inline bool isTestlistComp(const Token *tok) {
     const auto token_type = tok->getType();
-    return token_type == Python3Lexer::STRING ||
-           token_type == Python3Lexer::NUMBER ||
-           token_type == Python3Lexer::LAMBDA ||
-           token_type == Python3Lexer::NOT ||
-           token_type == Python3Lexer::NONE ||
-           token_type == Python3Lexer::TRUE ||
-           token_type == Python3Lexer::FALSE ||
-           token_type == Python3Lexer::AWAIT ||
-           token_type == Python3Lexer::ELLIPSIS ||
-           token_type == Python3Lexer::STAR ||
-           token_type == Python3Lexer::OPEN_PAREN ||
-           token_type == Python3Lexer::OPEN_BRACK ||
-           token_type == Python3Lexer::ADD ||
-           token_type == Python3Lexer::MINUS ||
-           token_type == Python3Lexer::NOT_OP ||
-           token_type == Python3Lexer::OPEN_BRACE;
+    return token_type == Python3Parser::STRING ||
+           token_type == Python3Parser::NUMBER ||
+           token_type == Python3Parser::LAMBDA ||
+           token_type == Python3Parser::NOT ||
+           token_type == Python3Parser::NONE ||
+           token_type == Python3Parser::TRUE ||
+           token_type == Python3Parser::FALSE ||
+           token_type == Python3Parser::AWAIT ||
+           token_type == Python3Parser::ELLIPSIS ||
+           token_type == Python3Parser::STAR ||
+           token_type == Python3Parser::OPEN_PAREN ||
+           token_type == Python3Parser::OPEN_BRACK ||
+           token_type == Python3Parser::ADD ||
+           token_type == Python3Parser::MINUS ||
+           token_type == Python3Parser::NOT_OP ||
+           token_type == Python3Parser::OPEN_BRACE;
 }
 
 inline bool isCompOp(PyLexer &lexer) {
@@ -471,16 +477,16 @@ inline bool isCompOp(PyLexer &lexer) {
     const auto token_type = lexer.curr->getType();
     const auto next_token_type = lexer.next->getType();
 
-    return token_type == Python3Lexer::LESS_THAN ||
-           token_type == Python3Lexer::GREATER_THAN ||
-           token_type == Python3Lexer::EQUALS ||
-           token_type == Python3Lexer::GT_EQ ||
-           token_type == Python3Lexer::LT_EQ ||
-           token_type == Python3Lexer::NOT_EQ_2 ||
-           token_type == Python3Lexer::IN ||
-           (token_type == Python3Lexer::NOT && next_token_type == Python3Lexer::IN) ||
-           token_type == Python3Lexer::IS ||
-           (token_type == Python3Lexer::IS && next_token_type == Python3Lexer::NOT);
+    return token_type == Python3Parser::LESS_THAN ||
+           token_type == Python3Parser::GREATER_THAN ||
+           token_type == Python3Parser::EQUALS ||
+           token_type == Python3Parser::GT_EQ ||
+           token_type == Python3Parser::LT_EQ ||
+           token_type == Python3Parser::NOT_EQ_2 ||
+           token_type == Python3Parser::IN ||
+           (token_type == Python3Parser::NOT && next_token_type == Python3Parser::IN) ||
+           token_type == Python3Parser::IS ||
+           (token_type == Python3Parser::IS && next_token_type == Python3Parser::NOT);
 }
 
 
@@ -522,6 +528,14 @@ struct Comprehension : public Node {
     Node *iter;
     std::vector<IfStmt *> ifs;
     bool is_async;
+};
+
+struct GeneratorExp : public Node {
+    explicit GeneratorExp(Node *elt, std::vector<Node *> generators)
+            : elt(elt), generators(generators) {}
+
+    Node *elt;
+    std::vector<Node *> generators;
 };
 
 struct Dict : public Node {
@@ -810,12 +824,10 @@ struct Const : public Node {
 };
 
 struct Arguments : public Node {
-    explicit Arguments(const std::vector<Argument *> &args)
+    explicit Arguments(const std::vector<Node *> &args)
             : args(args) {}
 
-    //TODO(threadedstream): add str() method
-
-    std::vector<Argument *> args;
+    std::vector<Node *> args;
 };
 
 struct Name : public Node {
@@ -854,6 +866,44 @@ struct Argument : public Node {
     Node *type;
     Node *default_val;
 };
+
+struct Parameter : public Node {
+    explicit Parameter(Name *name, Node *type, Node *default_val)
+            : name(name), type(type), default_val(default_val) {}
+
+    std::string str() const noexcept override {
+        std::ostringstream arg_str;
+
+        arg_str << "Parameter(name=" << name->str() << ",type=" << type->str() << ",default_val=" << default_val->str()
+                << ")";
+
+        return arg_str.str();
+    }
+
+    virtual std::vector<Node *> getChildren() const override {
+        return {name, type, default_val};
+    }
+
+    Name *name;
+    Node *type;
+    Node *default_val;
+};
+
+struct Parameters : public Node {
+    explicit Parameters(const std::vector<Node *> &params)
+            : params(params) {}
+
+    std::vector<Node *> params;
+};
+
+struct Keyword : public Node {
+    explicit Keyword(const std::string &arg, Node *value)
+            : arg(arg), value(value) {}
+
+    std::string arg;
+    Node *value;
+};
+
 
 struct Alias {
     explicit Alias(Name *name, Name *as)
@@ -947,7 +997,7 @@ struct Comparison : public Node {
 };
 
 struct FuncDef : public Node {
-    explicit FuncDef(Name *name, Arguments *parameters, Node *body, Node *return_type) :
+    explicit FuncDef(Name *name, Parameters *parameters, Node *body, Node *return_type) :
             name(name), parameters(parameters), body(body), return_type(return_type) {};
 
     std::string str() const noexcept override {
@@ -960,11 +1010,19 @@ struct FuncDef : public Node {
     }
 
     Name *name;
-    Arguments *parameters;
+    Parameters *parameters;
     Node *body;
     Node *return_type;
 };
 
+struct Call : public Node {
+    explicit Call(Node *func, const std::vector<Node *> &args, const std::vector<Keyword *> &keywords)
+            : func(func), args(args), keywords(keywords) {}
+
+    Node *func;
+    std::vector<Node *> args;
+    std::vector<Keyword *> keywords;
+};
 
 struct Pass : public Node {
     Pass() {}
@@ -975,7 +1033,6 @@ struct Global : public Node {
             : names(names) {}
 
     std::vector<Name *> names;
-
 };
 
 struct Assert : public Node {
@@ -992,35 +1049,3 @@ struct Nonlocal : public Node {
 
     std::vector<Name *> names;
 };
-
-
-struct CallFunc : public Node {
-    explicit CallFunc(Name *name, Arguments *arguments)
-            : name(name), arguments(arguments) {}
-
-    std::string str() const noexcept override {
-        const std::string arguments_str = arguments->args.size() == 0 ? "[]" : ([&]() -> std::string {
-            std::string arg_nodes_str;
-            for (const auto &arg: arguments->args) {
-                arg_nodes_str += arg->str();
-            }
-
-            return arg_nodes_str;
-        })();
-
-        std::ostringstream call_func_str;
-        call_func_str << "CallFunc(name=" << name->str() << ",arguments=" << arguments_str << ")";
-
-        return call_func_str.str();
-    }
-
-    std::vector<Node *> getChildren() const override {
-        return {name, arguments};
-    }
-
-    Name *name;
-    Arguments *arguments;
-    int32_t curr_arg_num = 0;
-};
-
-
