@@ -134,7 +134,7 @@ Node *parseAndTest(PyLexer &lexer);
 
 Node *parseNotTest(PyLexer &lexer);
 
-Node *parseArgList(PyLexer &lexer);
+Arguments *parseArglist(PyLexer &lexer);
 
 Node *parseArgument(PyLexer &lexer);
 
@@ -534,6 +534,12 @@ struct GeneratorExp : public Node {
     explicit GeneratorExp(Node *elt, std::vector<Node *> generators)
             : elt(elt), generators(generators) {}
 
+    virtual std::vector<Node *> getChildren() const{
+        auto temp = generators;
+        temp.push_back(elt);
+        return temp;
+    }
+
     Node *elt;
     std::vector<Node *> generators;
 };
@@ -824,10 +830,20 @@ struct Const : public Node {
 };
 
 struct Arguments : public Node {
-    explicit Arguments(const std::vector<Node *> &args)
-            : args(args) {}
+    explicit Arguments(const std::vector<Node *> &args, const std::vector<Node *> &keywords)
+            : args(args), keywords(keywords) {}
+
+    virtual std::vector<Node *> getChildren() const {
+        // coalesce two vectors into the single one
+        std::vector<Node *> temp;
+        temp = args;
+        temp.insert(temp.end(), keywords.begin(), keywords.end());
+
+        return temp;
+    }
 
     std::vector<Node *> args;
+    std::vector<Node *> keywords;
 };
 
 struct Name : public Node {
@@ -1016,12 +1032,15 @@ struct FuncDef : public Node {
 };
 
 struct Call : public Node {
-    explicit Call(Node *func, const std::vector<Node *> &args, const std::vector<Keyword *> &keywords)
-            : func(func), args(args), keywords(keywords) {}
+    explicit Call(Node *func, Arguments *arguments)
+            : func(func), arguments(arguments) {}
+
+    virtual std::vector<Node *> getChildren() const {
+        return {func, arguments};
+    }
 
     Node *func;
-    std::vector<Node *> args;
-    std::vector<Keyword *> keywords;
+    Arguments *arguments;
 };
 
 struct Pass : public Node {

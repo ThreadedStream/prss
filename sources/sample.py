@@ -1,1 +1,1 @@
-x = {z : y for y in range(6)}
+dot(x for x in range(6), y, z)

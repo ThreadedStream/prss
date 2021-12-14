@@ -412,6 +412,7 @@ Node *parseCompIf(PyLexer &lexer) {
         case Python3Parser::ASYNC:
         case Python3Parser::FOR:
             const auto comp_iter = parseCompIter(lexer);
+            return comp_iter;
     }
 
     return nullptr;
@@ -426,7 +427,7 @@ Node *parseCompIter(PyLexer &lexer) {
         case Python3Parser::FOR:
             return parseCompFor(lexer);
         default:
-        ERR_MSG_EXIT("Expected IF, ASYNC or FOR");
+            ERR_MSG_EXIT("Expected IF, ASYNC or FOR");
     }
 }
 
@@ -525,7 +526,7 @@ Node *parseTestNoCond(PyLexer &lexer) {
     }
 }
 
-Node *parseLambdefNoCond(PyLexer &lexer) {
+Node *parseLambDefNoCond(PyLexer &lexer) {
     return nullptr;
 }
 
@@ -606,12 +607,17 @@ TestList *parseTestList(PyLexer &lexer) {
     return test_list;
 }
 
-Node *parseArglist(PyLexer &lexer) {
+Arguments *parseArglist(PyLexer &lexer) {
     const auto argument = parseArgument(lexer);
 
-    auto arguments = new Arguments({});
+    auto arguments = new Arguments({}, {});
 
-    arguments->args.push_back(argument);
+    if (const auto kwd = dynamic_cast<Keyword*>(argument)) {
+        arguments->keywords.push_back(kwd);
+    } else {
+        arguments->args.push_back(argument);
+    }
+
     while (lexer.curr->getType() == Python3Parser::COMMA) {
         lexer.consume(Python3Parser::COMMA);
         switch (lexer.curr->getType()) {
@@ -634,7 +640,14 @@ Node *parseArglist(PyLexer &lexer) {
             case Python3Parser::POWER:
             case Python3Parser::STAR: {
                 const auto argument = parseArgument(lexer);
-                arguments->args.push_back(argument);
+                // i'm going to leave as it is until i come up with
+                // something much better
+                if (const auto kwd = dynamic_cast<Keyword *>(argument)) {
+                    arguments->keywords.push_back(kwd);
+                } else {
+                    arguments->args.push_back(argument);
+                }
+                break;
             }
             default:
                 goto ret;
@@ -676,10 +689,13 @@ Node *parseArgument(PyLexer &lexer) {
                 }
                 return generator_exp;
             }
-            lexer.consume(Python3Parser::ASSIGN);
-            const auto value = parseTest(lexer);
-            const auto keyword = new Keyword(arg_name, value);
-            return keyword;
+            if (lexer.curr->getType() == Python3Parser::ASSIGN) {
+                lexer.consume(Python3Parser::ASSIGN);
+                const auto value = parseTest(lexer);
+                const auto keyword = new Keyword(arg_name, value);
+                return keyword;
+            }
+            break;
         }
         case Python3Parser::POWER: {
             lexer.consume(Python3Parser::POWER);
@@ -690,13 +706,14 @@ Node *parseArgument(PyLexer &lexer) {
         case Python3Parser::STAR: {
             lexer.consume(Python3Parser::STAR);
             const auto value = parseTest(lexer);
-            const auto keyword = new Keyword("", value);
+            const auto keyword = new StarredExpr(value);
             return keyword;
         }
-        default: {
-            const auto keyword = new Keyword(nullptr, fallback_arg);
-        }
+        default:
+            ERR_MSG_EXIT("Expected STAR, POWER or TEST");
     }
+
+    return fallback_arg;
 }
 
 TryStmt *parseTryStmt(PyLexer &lexer) {
@@ -1035,16 +1052,21 @@ Node *parseAtomExpr(PyLexer &lexer) {
 
     const auto atom = parseAtom(lexer);
     while (lexer.curr->getType() == Python3Parser::DOT ||
-            lexer.curr->getType() == Python3Parser::OPEN_PAREN ||
-            lexer.curr->getType() == Python3Parser::OPEN_BRACK) {
+           lexer.curr->getType() == Python3Parser::OPEN_PAREN ||
+           lexer.curr->getType() == Python3Parser::OPEN_BRACK) {
 
         switch (lexer.curr->getType()) {
             case Python3Parser::OPEN_PAREN: {
-                static auto call = new Call(atom, {}, {});
-                call->
+                lexer.consume(Python3Parser::OPEN_PAREN);
+                auto call = new Call(atom, nullptr);
+                call->arguments = parseArglist(lexer);
+                lexer.consume(Python3Parser::CLOSE_PAREN);
+                return call;
             }
         }
     }
+
+    return atom;
 }
 
 Node *parseTestlistComp(PyLexer &lexer) {
@@ -1159,22 +1181,17 @@ Node *parseCompFor(PyLexer &lexer) {
 
     Node *temp;
     switch (lexer.curr->getType()) {
+        case Python3Parser::ASYNC:
         case Python3Parser::IF:
         case Python3Parser::FOR:
             temp = parseCompIter(lexer);
             break;
-        default: {
-            if (lexer.curr->getType() == Python3Parser::ASYNC &&
-                lexer.next && lexer.next->getType() == Python3Parser::FOR) {
-
-                temp = parseCompIter(lexer);
-            }
-        }
+        default:
             break;
     }
 
     // TODO(threadedstream): return anything else but nullptr
-    return nullptr;
+    return comp_for;
 }
 
 Node *parseDict(PyLexer &lexer) {
@@ -1185,12 +1202,15 @@ Node *parseDict(PyLexer &lexer) {
 
     switch (lexer.curr->getType()) {
         case Python3Parser::ASYNC:
-        case Python3Parser::FOR:
+        case Python3Parser::FOR: {
             auto dict = new DictComp(key, value, {});
             const auto comprehension = parseCompFor(lexer);
             dict->generators.push_back(comprehension);
+            return dict;
+        }
+        default:
+            return nullptr;
     }
-
 }
 
 //(
@@ -1251,7 +1271,7 @@ Node *parseDictorsetmaker(PyLexer &lexer) {
 }
 
 Node *parseTrailer(PyLexer &lexer) {
-    const auto current_token = lexer.curr;
+    //const auto current_token = lexer.curr;
 
     switch (lexer.curr->getType()) {
         case Python3Parser::OPEN_PAREN: {
@@ -1291,6 +1311,7 @@ Node *parseTrailer(PyLexer &lexer) {
             break;
     }
 
+    return nullptr;
 }
 
 Node *parseTerm(PyLexer &lexer) {
@@ -1344,7 +1365,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseDictorsetmaker(lexer);
+    return parseAtomExpr(lexer);
 }
 
 void destroyAst(Node *root) {
