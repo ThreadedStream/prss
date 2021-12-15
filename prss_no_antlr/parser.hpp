@@ -102,6 +102,8 @@ Node *parseTerm(PyLexer &lexer);
 
 Node *parseArithExpr(PyLexer &lexer);
 
+Node *parseVarArgsList(PyLexer &lexer);
+
 Parameters *parseTypedArgsList(PyLexer &lexer);
 
 Node *parseComparison(PyLexer &lexer);
@@ -534,7 +536,7 @@ struct GeneratorExp : public Node {
     explicit GeneratorExp(Node *elt, std::vector<Node *> generators)
             : elt(elt), generators(generators) {}
 
-    virtual std::vector<Node *> getChildren() const{
+    virtual std::vector<Node *> getChildren() const {
         auto temp = generators;
         temp.push_back(elt);
         return temp;
@@ -906,10 +908,20 @@ struct Parameter : public Node {
 };
 
 struct Parameters : public Node {
-    explicit Parameters(const std::vector<Node *> &params)
-            : params(params) {}
+
+    struct ExtraParamData {
+        Node *kwarg;
+        Node *vararg;
+        std::vector<Node *> kwonlyargs;
+        std::vector<Node *> kw_defaults;
+        std::vector<Node *> defaults;
+    };
+
+    explicit Parameters(const std::vector<Node *> &params, const ExtraParamData& extra_param_data)
+            : params(params), extra_param_data(extra_param_data) {}
 
     std::vector<Node *> params;
+    ExtraParamData extra_param_data;
 };
 
 struct Keyword : public Node {

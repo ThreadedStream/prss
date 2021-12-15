@@ -77,6 +77,49 @@ Parameters *parseTypedArgsList(PyLexer &lexer) {
     return parameters;
 }
 
+//(vfpdef
+//  ('=' test)? (',' vfpdef ('=' test)?)*
+//  (',' ( '*' (vfpdef)? (',' vfpdef ('=' test)?)*
+//  (',' ('**' vfpdef (',')?)?)? | '**' vfpdef (',')?)?)?
+// | '*' (vfpdef)? (',' vfpdef ('=' test)?)* (',' ('**' vfpdef (',')?)?)?
+// | '**' vfpdef (',')?
+Node *parseVarArgsList(PyLexer &lexer) {
+    const auto current_token = lexer.curr;
+    lexer.consume(Python3Parser::NAME);
+    auto parameters = new Parameters({});
+    const auto arg = new Parameter(new Name(current_token->getText()), nullptr, nullptr);
+
+    if (lexer.curr->getType() == Python3Parser::ASSIGN) {
+        lexer.consume(Python3Parser::ASSIGN);
+        arg->default_val = parseTest(lexer);
+    }
+
+    parameters->params.push_back(arg);
+
+    while (lexer.curr->getType() == Python3Parser::COMMA &&
+            lexer.next->getType() == Python3Parser::NAME) {
+        lexer.consume(Python3Parser::COMMA);
+        const auto arg = new Parameter(new Name(lexer.curr->getText()), nullptr, nullptr);
+        lexer.consume(Python3Parser::NAME);
+        if (lexer.curr->getType() == Python3Parser::ASSIGN) {
+            lexer.consume(Python3Parser::ASSIGN);
+            arg->default_val = parseTest(lexer);
+        }
+        parameters->params.push_back(arg);
+    }
+
+    while (lexer.curr->getType() == Python3Parser::COMMA &&
+            lexer.next->getType() == Python3Parser::STAR) {
+
+        lexer.consume(Python3Parser::COMMA);
+
+    }
+
+
+    return nullptr;
+}
+
+
 FuncDef *parseFuncDef(PyLexer &lexer) {
     lexer.consume(Python3Parser::DEF);
 
@@ -697,12 +740,14 @@ Node *parseArgument(PyLexer &lexer) {
             }
             break;
         }
+
         case Python3Parser::POWER: {
             lexer.consume(Python3Parser::POWER);
             const auto value = parseTest(lexer);
             const auto keyword = new Keyword("", value);
             return keyword;
         }
+
         case Python3Parser::STAR: {
             lexer.consume(Python3Parser::STAR);
             const auto value = parseTest(lexer);
@@ -1128,31 +1173,27 @@ Node *parseAtom(PyLexer &lexer) {
             }
 
             lexer.consume(Python3Parser::CLOSE_BRACE);
+            break;
         }
-
         case Python3Parser::NUMBER: {
             lexer.consume(Python3Parser::NUMBER);
             node = new Const(current_token->getText(), Python3Parser::NUMBER);
             break;
         }
-
         case Python3Parser::STRING: {
             lexer.consume(Python3Parser::STRING);
             node = new Const(current_token->getText(), Python3Parser::STRING);
             break;
         }
-
         case Python3Parser::NAME: {
             lexer.consume(Python3Parser::NAME);
             node = new Name(current_token->getText());
             break;
         }
-
         case Python3Parser::ELLIPSIS: {
             lexer.consume(Python3Parser::ELLIPSIS);
             break;
         }
-
         case Python3Parser::NONE: {
             lexer.consume(Python3Parser::NONE);
             break;
