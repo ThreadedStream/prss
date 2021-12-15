@@ -32,6 +32,7 @@ struct Node;
 struct Module;
 struct SimpleStmt;
 struct FuncDef;
+struct Lambda;
 struct ClassDef;
 struct AsyncFuncDef;
 struct BinOp;
@@ -142,7 +143,7 @@ Node *parseArgument(PyLexer &lexer);
 
 Parameters *parseParameters(PyLexer &lexer);
 
-Parameter *parseParameter(PyLexer &lexer);
+Parameter *parseParameter(PyLexer &lexer, const bool check_type);
 
 Node *parseAsyncStmt(PyLexer &lexer);
 
@@ -912,16 +913,17 @@ struct Parameters : public Node {
     struct ExtraParamData {
         Node *kwarg;
         Node *vararg;
-        std::vector<Node *> kwonlyargs;
+        std::vector<Node *> pos_only_args;
+        std::vector<Node *> kw_only_args;
         std::vector<Node *> kw_defaults;
         std::vector<Node *> defaults;
     };
 
-    explicit Parameters(const std::vector<Node *> &params, const ExtraParamData& extra_param_data)
-            : params(params), extra_param_data(extra_param_data) {}
+    explicit Parameters(const std::vector<Node *> &params, const ExtraParamData &extra)
+            : params(params), extra(extra) {}
 
     std::vector<Node *> params;
-    ExtraParamData extra_param_data;
+    ExtraParamData extra;
 };
 
 struct Keyword : public Node {
@@ -1041,6 +1043,19 @@ struct FuncDef : public Node {
     Parameters *parameters;
     Node *body;
     Node *return_type;
+};
+
+struct Lambda : public Node {
+    explicit Lambda(Node *args, Node *body)
+            : args(args), body(body) {}
+
+
+    virtual std::vector<Node *> getChildren() const override {
+        return {args, body};
+    }
+
+    Node *args;
+    Node *body;
 };
 
 struct Call : public Node {

@@ -12,13 +12,13 @@ Parameters *parseParameters(PyLexer &lexer) {
     return parameters;
 }
 
-Parameter *parseParameter(PyLexer &lexer) {
+Parameter *parseParameter(PyLexer &lexer, const bool check_type = true) {
     const auto current_token = lexer.curr;
     lexer.consume(Python3Parser::NAME);
 
     auto param = new Parameter(new Name(current_token->getText()), nullptr, nullptr);
 
-    if (lexer.curr->getType() == Python3Parser::COLON) {
+    if (check_type && lexer.curr->getType() == Python3Parser::COLON) {
         lexer.consume(Python3Parser::COLON);
         param->type = parseTest(lexer);
     }
@@ -51,8 +51,8 @@ Node *parseFactor(PyLexer &lexer) {
 //      POWER tfpdef (COMMA)?
 // )
 Parameters *parseTypedArgsList(PyLexer &lexer) {
-    Parameters *parameters = new Parameters({});
-    auto parameter = parseParameter(lexer);
+    Parameters *parameters = new Parameters({}, {});
+    auto parameter = parseParameter(lexer, true);
 
     if (lexer.curr->getType() == Python3Parser::ASSIGN) {
         lexer.consume(Python3Parser::ASSIGN);
@@ -66,12 +66,12 @@ Parameters *parseTypedArgsList(PyLexer &lexer) {
     while (lexer.curr->getType() == Python3Parser::COMMA &&
            lexer.next->getType() == Python3Parser::NAME) {
         lexer.consume(Python3Parser::COMMA);
-        auto argument = parseArgument(lexer);
+        auto param = parseParameter(lexer, true);
         if (lexer.curr->getType() == Python3Parser::ASSIGN) {
             lexer.consume(Python3Parser::ASSIGN);
             parameter->default_val = parseTest(lexer);
         }
-        parameters->params.push_back(argument);
+        parameters->params.push_back(param);
     }
 
     return parameters;
@@ -83,40 +83,122 @@ Parameters *parseTypedArgsList(PyLexer &lexer) {
 //  (',' ('**' vfpdef (',')?)?)? | '**' vfpdef (',')?)?)?
 // | '*' (vfpdef)? (',' vfpdef ('=' test)?)* (',' ('**' vfpdef (',')?)?)?
 // | '**' vfpdef (',')?
+// );
 Node *parseVarArgsList(PyLexer &lexer) {
-    const auto current_token = lexer.curr;
-    lexer.consume(Python3Parser::NAME);
-    auto parameters = new Parameters({});
-    const auto arg = new Parameter(new Name(current_token->getText()), nullptr, nullptr);
+    auto parameters = new Parameters({}, {});
+    switch (lexer.curr->getType()) {
+        case Python3Parser::NAME: {
+            const auto arg = parseParameter(lexer, false);
 
-    if (lexer.curr->getType() == Python3Parser::ASSIGN) {
-        lexer.consume(Python3Parser::ASSIGN);
-        arg->default_val = parseTest(lexer);
-    }
+            if (lexer.curr->getType() == Python3Parser::ASSIGN) {
+                lexer.consume(Python3Parser::ASSIGN);
+                arg->default_val = parseTest(lexer);
+            }
 
-    parameters->params.push_back(arg);
+            parameters->params.push_back(arg);
 
-    while (lexer.curr->getType() == Python3Parser::COMMA &&
-            lexer.next->getType() == Python3Parser::NAME) {
-        lexer.consume(Python3Parser::COMMA);
-        const auto arg = new Parameter(new Name(lexer.curr->getText()), nullptr, nullptr);
-        lexer.consume(Python3Parser::NAME);
-        if (lexer.curr->getType() == Python3Parser::ASSIGN) {
-            lexer.consume(Python3Parser::ASSIGN);
-            arg->default_val = parseTest(lexer);
+            while (lexer.curr->getType() == Python3Parser::COMMA &&
+                   lexer.next->getType() == Python3Parser::NAME) {
+                lexer.consume(Python3Parser::COMMA);
+                const auto arg = parseParameter(lexer, false);
+
+                if (lexer.curr->getType() == Python3Parser::ASSIGN) {
+                    lexer.consume(Python3Parser::ASSIGN);
+                    arg->default_val = parseTest(lexer);
+                }
+
+                parameters->params.push_back(arg);
+            }
+
+            const auto text = lexer.curr->getText();
+            if (lexer.curr->getType() == Python3Parser::COMMA) {
+                lexer.consume(Python3Parser::COMMA);
+
+                if (lexer.curr->getType() == Python3Parser::STAR) {
+                    if (lexer.curr->getType() == Python3Parser::NAME) {
+                        parameters->extra.vararg = parseParameter(lexer, false);
+                    }
+                    while (lexer.curr->getType() == Python3Parser::COMMA &&
+                           lexer.next->getType() == Python3Parser::NAME) {
+
+                        lexer.consume(Python3Parser::COMMA);
+                        const auto arg = parseParameter(lexer, false);
+                        if (lexer.curr->getType() == Python3Parser::ASSIGN) {
+                            lexer.consume(Python3Parser::ASSIGN);
+                            arg->default_val = parseTest(lexer);
+                        }
+                        parameters->extra.kw_only_args.push_back(arg);
+                    }
+                }
+
+                if (lexer.curr->getType() == Python3Parser::COMMA) {
+                    lexer.consume(Python3Parser::COMMA);
+
+                    if (lexer.curr->getType() == Python3Parser::POWER) {
+                        lexer.consume(Python3Parser::POWER);
+                        parameters->extra.kwarg = parseParameter(lexer, false);
+
+                        if (lexer.curr->getType() == Python3Parser::COMMA) {
+                            lexer.consume(Python3Parser::COMMA);
+                        }
+                    }
+                }
+
+                lexer.consume(Python3Parser::POWER);
+                parameters->extra.kwarg = parseParameter(lexer, false);
+
+                if (lexer.curr->getType() == Python3Parser::COMMA) {
+                    lexer.consume(Python3Parser::COMMA);
+                }
+            }
+            break;
         }
-        parameters->params.push_back(arg);
+        case Python3Parser::STAR: {
+            lexer.consume(Python3Parser::STAR);
+
+            if (lexer.curr->getType() == Python3Parser::NAME) {
+                parameters->extra.vararg = parseParameter(lexer, false);
+            }
+
+            while (lexer.curr->getType() == Python3Parser::COMMA &&
+                    lexer.next->getType() == Python3Parser::NAME) {
+
+                lexer.consume(Python3Parser::COMMA);
+                auto arg = parseParameter(lexer, false);
+
+                if (lexer.curr->getType() == Python3Parser::ASSIGN) {
+                    lexer.consume(Python3Parser::ASSIGN);
+                    arg->default_val = parseTest(lexer);
+                }
+                parameters->extra.kw_only_args.push_back(arg);
+            }
+
+            if (lexer.curr->getType() == Python3Parser::COMMA) {
+                lexer.consume(Python3Parser::COMMA);
+
+                if (lexer.curr->getType() == Python3Parser::POWER) {
+                    lexer.consume(Python3Parser::POWER);
+                    parameters->extra.kwarg = parseParameter(lexer, false);
+
+                    if (lexer.curr->getType() == Python3Parser::COMMA) {
+                        lexer.consume(Python3Parser::COMMA);
+                    }
+                }
+            }
+            break;
+        }
+        case Python3Parser::POWER:{
+            lexer.consume(Python3Parser::POWER);
+            parameters->extra.kwarg = parseParameter(lexer, false);
+            if (lexer.curr->getType() == Python3Parser::COMMA) {
+                lexer.consume(Python3Parser::COMMA);
+            }
+            break;
+        }
     }
 
-    while (lexer.curr->getType() == Python3Parser::COMMA &&
-            lexer.next->getType() == Python3Parser::STAR) {
 
-        lexer.consume(Python3Parser::COMMA);
-
-    }
-
-
-    return nullptr;
+    return parameters;
 }
 
 
@@ -470,7 +552,7 @@ Node *parseCompIter(PyLexer &lexer) {
         case Python3Parser::FOR:
             return parseCompFor(lexer);
         default:
-            ERR_MSG_EXIT("Expected IF, ASYNC or FOR");
+        ERR_MSG_EXIT("Expected IF, ASYNC or FOR");
     }
 }
 
@@ -570,7 +652,8 @@ Node *parseTestNoCond(PyLexer &lexer) {
 }
 
 Node *parseLambDefNoCond(PyLexer &lexer) {
-    return nullptr;
+    lexer.consume(Python3Parser::LAMBDA);
+    auto lambda = new Lambda(nullptr, nullptr);
 }
 
 TestList *parseTestlist(PyLexer &lexer) {
@@ -655,7 +738,7 @@ Arguments *parseArglist(PyLexer &lexer) {
 
     auto arguments = new Arguments({}, {});
 
-    if (const auto kwd = dynamic_cast<Keyword*>(argument)) {
+    if (const auto kwd = dynamic_cast<Keyword *>(argument)) {
         arguments->keywords.push_back(kwd);
     } else {
         arguments->args.push_back(argument);
@@ -755,7 +838,7 @@ Node *parseArgument(PyLexer &lexer) {
             return keyword;
         }
         default:
-            ERR_MSG_EXIT("Expected STAR, POWER or TEST");
+        ERR_MSG_EXIT("Expected STAR, POWER or TEST");
     }
 
     return fallback_arg;
@@ -821,7 +904,18 @@ Node *parseNotTest(PyLexer &lexer) {
 
 
 Node *parseLambDef(PyLexer &lexer) {
-    return nullptr;
+    lexer.consume(Python3Parser::LAMBDA);
+    auto lambda = new Lambda(nullptr, nullptr);
+    const auto current_type = lexer.curr->getType();
+    if (current_type == Python3Parser::NAME ||
+        current_type == Python3Parser::STAR ||
+        current_type == Python3Parser::POWER) {
+        lambda->args = parseVarArgsList(lexer);
+    }
+    lexer.consume(Python3Parser::COLON);
+    lambda->body = parseTest(lexer);
+
+    return lambda;
 }
 
 Node *parseTest(PyLexer &lexer) {
@@ -1191,15 +1285,28 @@ Node *parseAtom(PyLexer &lexer) {
             break;
         }
         case Python3Parser::ELLIPSIS: {
+            // not sure about that one
+            node = new Const(lexer.curr->getText(), Python3Parser::NONE);
             lexer.consume(Python3Parser::ELLIPSIS);
             break;
         }
         case Python3Parser::NONE: {
+            node = new Const(lexer.curr->getText(), Python3Parser::NONE);
             lexer.consume(Python3Parser::NONE);
             break;
         }
+        case Python3Parser::FALSE: {
+            node = new Const(lexer.curr->getText(), Python3Parser::NONE);
+            lexer.consume(Python3Parser::FALSE);
+            break;
+        }
+        case Python3Parser::TRUE: {
+            node = new Const(lexer.curr->getText(), Python3Parser::NONE);
+            lexer.consume(Python3Parser::TRUE);
+            break;
+        }
         default:
-        ERR_MSG_EXIT("Encountered an unknown node");
+            ERR_MSG_EXIT("Encountered an unknown node");
     }
 
     return node;
@@ -1406,7 +1513,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseAtomExpr(lexer);
+    return parseLambDef(lexer);
 }
 
 void destroyAst(Node *root) {

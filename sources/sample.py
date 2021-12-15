@@ -1,1 +1,1 @@
-dot(x for x in range(6), y = 22, z = 'hello')
+lambda x, y, z: x + y + z
