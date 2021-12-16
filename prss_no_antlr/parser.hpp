@@ -68,6 +68,7 @@ struct Parameter;
 struct Parameters;
 struct SetComp;
 struct Dict;
+struct ExceptHandler;
 struct Set;
 struct Global;
 struct Assert;
@@ -180,6 +181,8 @@ WithStmt *parseWithStmt(PyLexer &lexer);
 ForStmt *parseForStmt(PyLexer &lexer);
 
 TryStmt *parseTryStmt(PyLexer &lexer);
+
+ExceptHandler* parseExceptClause(PyLexer &lexer);
 
 Aliases *parseImportAsNames(PyLexer &lexer);
 
@@ -600,6 +603,22 @@ struct ForStmt : public Node {
 };
 
 struct TryStmt : public Node {
+    explicit TryStmt(Node *body, std::vector<Node *> handlers, Node *or_else, Node *final_body)
+            : body(body), handlers(handlers), or_else(or_else), final_body(final_body) {}
+
+    Node *body;
+    std::vector<Node *> handlers;
+    Node *or_else;
+    Node *final_body;
+};
+
+struct ExceptHandler : public Node {
+    explicit ExceptHandler(Node *type, const std::string& name, Node *body)
+            : type(type), name(name), body(body) {}
+
+    Node *type;
+    std::string name;
+    Node *body;
 };
 
 struct ExprList : public Node {
