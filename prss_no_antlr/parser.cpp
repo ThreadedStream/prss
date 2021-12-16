@@ -465,14 +465,14 @@ ImportFrom *parseImportFrom(PyLexer &lexer) {
         case Python3Parser::STAR: {
             const auto name = new Name("*");
             import_from->aliases->aliases.push_back(new Alias(name, nullptr));
-        }
             break;
+        }
         case Python3Parser::OPEN_PAREN: {
             lexer.consume(Python3Parser::OPEN_PAREN);
             import_from->aliases = parseImportAsNames(lexer);
             lexer.consume(Python3Parser::CLOSE_PAREN);
-        }
             break;
+        }
         case Python3Parser::NAME:
             import_from->aliases = parseImportAsNames(lexer);
             break;
