@@ -401,8 +401,7 @@ Node *parseFlowStmt(PyLexer &lexer) {
         case Python3Parser::YIELD:
             return parseYieldStmt(lexer);
         default:
-            // less likely to get here
-            return nullptr;
+        ERR_MSG_EXIT("expected BREAK, CONTINUE, RETURN, RAISE or YIELD");
     }
 }
 
@@ -627,11 +626,10 @@ Node *parseCompIf(PyLexer &lexer) {
         case Python3Parser::IF:
         case Python3Parser::ASYNC:
         case Python3Parser::FOR:
-            const auto comp_iter = parseCompIter(lexer);
-            return comp_iter;
+            return parseCompIter(lexer);
     }
 
-    return nullptr;
+    return test_no_cond;
 }
 
 
@@ -1206,25 +1204,36 @@ Node *parseExprStmt(PyLexer &lexer) {
             }
             return assign;
         }
-        default: {
-            if (isAugAssign(lexer.curr)) {
-                auto aug_assign = new AugAssign(nullptr, lexer.curr->getType(), nullptr);
-                aug_assign->target = test_list_star_expr;
-                lexer.consume(lexer.curr->getType());
-                Node *value;
-                if (lexer.curr->getType() == Python3Parser::YIELD) {
-                    value = parseYieldExpr(lexer);
-                } else {
-                    value = parseTestList(lexer);
-                }
-                aug_assign->value = value;
-                return aug_assign;
+        case Python3Parser::ADD_ASSIGN:
+        case Python3Parser::SUB_ASSIGN:
+        case Python3Parser::MULT_ASSIGN:
+        case Python3Parser::AT_ASSIGN:
+        case Python3Parser::DIV_ASSIGN:
+        case Python3Parser::MOD_ASSIGN:
+        case Python3Parser::AND_ASSIGN:
+        case Python3Parser::OR_ASSIGN:
+        case Python3Parser::XOR_ASSIGN:
+        case Python3Parser::LEFT_SHIFT_ASSIGN:
+        case Python3Parser::RIGHT_SHIFT_ASSIGN:
+        case Python3Parser::POWER_ASSIGN:
+        case Python3Parser::IDIV_ASSIGN: {
+            auto aug_assign = new AugAssign(nullptr, lexer.curr->getType(), nullptr);
+            aug_assign->target = test_list_star_expr;
+            lexer.consume(lexer.curr->getType());
+            Node *value;
+            if (lexer.curr->getType() == Python3Parser::YIELD) {
+                value = parseYieldExpr(lexer);
+            } else {
+                value = parseTestList(lexer);
             }
+            aug_assign->value = value;
+            return aug_assign;
         }
+        default:
+            break;
     }
 
-    // maybe, trigger crash
-    ERR_MSG_EXIT("expected COLON, ASSIGN or AUG_ASSIGN");
+    return test_list_star_expr;
 }
 
 AnnAssign *parseAnnAssign(PyLexer &lexer) {
@@ -1498,19 +1507,16 @@ Node *parseCompFor(PyLexer &lexer) {
     lexer.consume(Python3Parser::IN);
     comp_for->iter = parseOrTest(lexer);
 
-    Node *temp;
-    switch (lexer.curr->getType()) {
-        case Python3Parser::ASYNC:
-        case Python3Parser::IF:
-        case Python3Parser::FOR:
-            temp = parseCompIter(lexer);
-            break;
-        default:
-            break;
-    }
+    const auto current_type = lexer.curr->getType();
+    while (current_type == Python3Parser::ASYNC ||
+           current_type == Python3Parser::IF ||
+           current_type == Python3Parser::FOR) {
 
-    // TODO(threadedstream): return anything else but nullptr
-    return comp_for;
+        const auto comp_iter = parseCompIter(lexer);
+        if (const auto comp = dynamic_cast<Comprehension*>(comp_iter)) {
+
+        }
+    }
 }
 
 Node *parseDict(PyLexer &lexer) {

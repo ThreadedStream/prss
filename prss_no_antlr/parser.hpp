@@ -953,7 +953,6 @@ struct Keyword : public Node {
     Node *value;
 };
 
-
 struct Alias {
     explicit Alias(Name *name, Name *as)
             : name(name), as(as) {}
