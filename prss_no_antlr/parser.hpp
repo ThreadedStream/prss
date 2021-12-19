@@ -527,12 +527,12 @@ struct Module : public Node {
 };
 
 struct Comprehension : public Node {
-    explicit Comprehension(Node *target, Node *iter, std::vector<IfStmt *> ifs, bool is_async)
+    explicit Comprehension(Node *target, Node *iter, std::vector<Node *> ifs, bool is_async)
             : target(target), iter(iter), ifs(ifs), is_async(is_async) {}
 
     Node *target;
     Node *iter;
-    std::vector<IfStmt *> ifs;
+    std::vector<Node *> ifs;
     bool is_async;
 };
 

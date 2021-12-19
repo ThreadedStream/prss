@@ -1,1 +1,1 @@
-{for x in range(6) if x < y}
+{x : y, z : q, **w, **y, **s}
