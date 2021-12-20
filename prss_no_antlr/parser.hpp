@@ -15,6 +15,7 @@
 #define ERR_TOK(expected_token_type) fprintf(stderr, "expected token %d", expected_token_type)
 #define ERR_MSG(message) fprintf(stderr, message)
 #define ERR_MSG_EXIT(message) ERR_MSG(message); exit(1)
+// TODO(threadedstream): define cleanup exit macro
 //#define ERR_MSG_CLEANUP_EXIT(message) ERR_MSG(message); destroyAst()
 
 template<typename T>
@@ -33,6 +34,8 @@ struct Module;
 struct SimpleStmt;
 struct FuncDef;
 struct Lambda;
+struct List;
+struct ListComp;
 struct ClassDef;
 struct AsyncFuncDef;
 struct BinOp;
@@ -53,6 +56,7 @@ struct Keyword;
 struct Import;
 struct ImportFrom;
 struct Raise;
+struct Subscript;
 struct Break;
 struct Alias;
 struct Aliases;
@@ -61,6 +65,8 @@ struct Attribute;
 struct TestList;
 struct Return;
 struct Const;
+struct Index;
+struct Slice;
 struct Argument;
 struct Arguments;
 struct DictComp;
@@ -154,6 +160,8 @@ ClassDef *parseClassDef(PyLexer &lexer);
 
 Node *parseSuite(PyLexer &lexer);
 
+Subscript *parseSubscript(PyLexer &lexer);
+
 Node *parseStmt(PyLexer &lexer);
 
 Node *parseSimpleStmt(PyLexer &lexer);
@@ -182,7 +190,7 @@ ForStmt *parseForStmt(PyLexer &lexer);
 
 TryStmt *parseTryStmt(PyLexer &lexer);
 
-ExceptHandler* parseExceptClause(PyLexer &lexer);
+ExceptHandler *parseExceptClause(PyLexer &lexer);
 
 Aliases *parseImportAsNames(PyLexer &lexer);
 
@@ -455,6 +463,26 @@ inline bool isTermOp(const Token *tok) {
            token_type == Python3Parser::MOD;
 }
 
+inline bool isTest(const Token *tok) {
+    const auto token_type = tok->getType();
+    return token_type == Python3Parser::STRING ||
+           token_type == Python3Parser::NUMBER ||
+           token_type == Python3Parser::LAMBDA ||
+           token_type == Python3Parser::NOT ||
+           token_type == Python3Parser::NONE ||
+           token_type == Python3Parser::TRUE ||
+           token_type == Python3Parser::FALSE ||
+           token_type == Python3Parser::AWAIT ||
+           token_type == Python3Parser::NAME ||
+           token_type == Python3Parser::ELLIPSIS ||
+           token_type == Python3Parser::OPEN_PAREN ||
+           token_type == Python3Parser::OPEN_BRACK ||
+           token_type == Python3Parser::ADD ||
+           token_type == Python3Parser::MINUS ||
+           token_type == Python3Parser::NOT_OP ||
+           token_type == Python3Parser::OPEN_BRACE;
+}
+
 inline bool isTestlistComp(const Token *tok) {
     const auto token_type = tok->getType();
     return token_type == Python3Parser::STRING ||
@@ -465,6 +493,7 @@ inline bool isTestlistComp(const Token *tok) {
            token_type == Python3Parser::TRUE ||
            token_type == Python3Parser::FALSE ||
            token_type == Python3Parser::AWAIT ||
+           token_type == Python3Parser::NAME ||
            token_type == Python3Parser::ELLIPSIS ||
            token_type == Python3Parser::STAR ||
            token_type == Python3Parser::OPEN_PAREN ||
@@ -559,10 +588,40 @@ struct Dict : public Node {
 };
 
 struct DictComp : public Node {
-    explicit DictComp(Node *key, Node *value, std::vector<Node *> generators)
+    explicit DictComp(Node *key, Node *value, const std::vector<Node *> &generators)
             : key(key), value(value), generators(generators) {}
 
     Node *key;
+    Node *value;
+    std::vector<Node *> generators;
+};
+
+struct Set : public Node {
+    explicit Set(const std::vector<Node *> &elements)
+            : elements(elements) {}
+
+    std::vector<Node *> elements;
+};
+
+struct List : public Node {
+    explicit List(const std::vector<Node *> &elements)
+            : elements(elements) {}
+
+    std::vector<Node *> elements;
+};
+
+struct ListComp : public Node {
+    explicit ListComp(Node *value, const std::vector<Node *> &generators)
+            : value(value), generators(generators) {}
+
+    Node *value;
+    std::vector<Node *> generators;
+};
+
+struct SetComp : public Node {
+    explicit SetComp(Node *value, const std::vector<Node *> &generators)
+            : value(value), generators(generators) {}
+
     Node *value;
     std::vector<Node *> generators;
 };
@@ -613,7 +672,7 @@ struct TryStmt : public Node {
 };
 
 struct ExceptHandler : public Node {
-    explicit ExceptHandler(Node *type, const std::string& name, Node *body)
+    explicit ExceptHandler(Node *type, const std::string &name, Node *body)
             : type(type), name(name), body(body) {}
 
     Node *type;
@@ -811,6 +870,37 @@ struct Yield : public Node {
             : target(target) {}
 
     Node *target;
+};
+
+struct Index : public Node {
+    explicit Index(Node *value)
+            : value(value) {}
+
+    Node *value;
+};
+
+struct Slice : public Node {
+    explicit Slice(Node *lower, Node *upper, Node *step)
+            : lower(lower), upper(upper), step(step) {}
+
+    Node *lower;
+    Node *upper;
+    Node *step;
+};
+
+struct Subscript : public Node {
+    explicit Subscript(Node *value, Node *slice)
+            : value(value), slice(slice) {}
+
+    Node *value;
+    Node *slice;
+};
+
+struct ExtSlice : public Node {
+    explicit ExtSlice(const std::vector<Node *> &dims)
+            : dims(dims) {}
+
+    std::vector<Node *> dims;
 };
 
 struct YieldFrom : public Node {
