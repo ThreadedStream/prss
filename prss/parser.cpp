@@ -17,6 +17,9 @@ Parameter *parseParameter(PyLexer &lexer, const bool check_type = true) {
     lexer.consume(Python3Parser::NAME);
 
     auto param = new Parameter(new Name(current_token->getText()), nullptr, nullptr);
+    param->line = current_token->getLine();
+    param->col_start_idx = current_token->getStartIndex();
+    param->col_end_idx = current_token->getStopIndex();
 
     if (check_type && lexer.curr->getType() == Python3Parser::COLON) {
         lexer.consume(Python3Parser::COLON);
@@ -1356,11 +1359,12 @@ Node *parsePower(PyLexer &lexer) {
 }
 
 Node *parseAtomExpr(PyLexer &lexer) {
+
     if (lexer.curr->getType() == Python3Parser::AWAIT) {
         lexer.consume(Python3Parser::AWAIT);
     }
 
-    const auto atom = parseAtom(lexer);
+    auto atom = parseAtom(lexer);
     while (lexer.curr->getType() == Python3Parser::DOT ||
            lexer.curr->getType() == Python3Parser::OPEN_PAREN ||
            lexer.curr->getType() == Python3Parser::OPEN_BRACK) {
@@ -1369,19 +1373,30 @@ Node *parseAtomExpr(PyLexer &lexer) {
             case Python3Parser::OPEN_PAREN: {
                 lexer.consume(Python3Parser::OPEN_PAREN);
                 auto call = new Call(atom, nullptr);
-                call->arguments = parseArglist(lexer);
+                if (lexer.curr->getType() != Python3Parser::CLOSE_PAREN)
+                    call->arguments = parseArglist(lexer);
                 lexer.consume(Python3Parser::CLOSE_PAREN);
-                return call;
+                atom = call;
+                break;
             }
             case Python3Parser::OPEN_BRACK: {
                 lexer.consume(Python3Parser::OPEN_BRACK);
-                auto subscript = new Subscript(atom, nullptr);
-                subscript->slice = parseSubscriptList(lexer);
+                auto subscript = parseSubscriptList(lexer);
+                subscript->value = atom;
                 lexer.consume(Python3Parser::CLOSE_BRACK);
-                return subscript;
+                atom = subscript;
+                break;
             }
             case Python3Parser::DOT: {
+                lexer.consume(Python3Parser::DOT);
+                auto attribute = new Attribute(atom, nullptr);
+                const auto current_token = lexer.curr;
+                lexer.consume(Python3Parser::NAME);
+                attribute->attr = new Name(current_token->getText());
+                atom = attribute;
             }
+            default:
+                ERR_MSG_EXIT("Expected OPEN_PAREN, OPEN_BRACK or DOT");
         }
     }
 
@@ -1476,40 +1491,66 @@ Node *parseTestlistComp(PyLexer &lexer) {
     }
 }
 
-Node *parseSubscriptList(PyLexer &lexer) {
 
-    if (isTest(lexer.curr)) {
-        const auto value = parseTest(lexer);
-        if (lexer.curr->getType() == Python3Lexer::COLON) {
-            lexer.consume(Python3Parser::COLON);
-            auto slice = new Slice(value, nullptr, nullptr);
-            if (isTest(lexer.curr)) {
-                slice->upper = parseTest(lexer);
-            }
-            if (lexer.curr->getType() == Python3Parser::COLON) {
-                lexer.consume(Python3Parser::COLON);
-
-                if (isTest(lexer.curr)) {
-                    slice->step = parseTest(lexer);
-                }
-            }
-            return slice;
-        } else {
-            // just a mere constant
-            return value;
-        }
-
-    } else {
-        ERR_MSG_EXIT("Expected TEST");
-    }
+Subscript *parseSubscriptList(PyLexer &lexer) {
+    auto subscript = parseSubscript(lexer);
 
     if (lexer.curr->getType() == Python3Parser::COMMA) {
+        auto ext_slice = new ExtSlice({subscript->slice});
+        while (lexer.curr->getType() == Python3Parser::COMMA && isTest(lexer.next)) {
+            lexer.consume(Python3Parser::COMMA);
 
+            const auto value = parseTest(lexer);
+            if (lexer.curr->getType() == Python3Lexer::COLON) {
+                lexer.consume(Python3Parser::COLON);
+                auto slice = new Slice(value, nullptr, nullptr);
+                if (isTest(lexer.curr)) {
+                    slice->upper = parseTest(lexer);
+                }
+                if (lexer.curr->getType() == Python3Parser::COLON) {
+                    lexer.consume(Python3Parser::COLON);
+
+                    if (isTest(lexer.curr)) {
+                        slice->step = parseTest(lexer);
+                    }
+                }
+                ext_slice->dims.push_back(slice);
+            } else {
+                ext_slice->dims.push_back(new Index(value));
+            }
+        }
+        if (lexer.curr->getType() == Python3Parser::COMMA) {
+            lexer.consume(Python3Parser::COMMA);
+        }
+
+        subscript->slice = ext_slice;
     }
+
+    return subscript;
+
+//    auto subscript_list = new SubscriptList(nullptr, {});
+//    const auto subscript = parseSubscript(lexer);
+//
+//    subscript_list->subscripts.push_back(subscript);
+//
+//    while (lexer.curr->getType() == Python3Parser::COMMA && isTest(lexer.next)) {
+//        lexer.consume(Python3Parser::COMMA);
+//
+//        const auto subscript = parseSubscript(lexer);
+//        subscript_list->subscripts.push_back(subscript);
+//    }
+//
+//    if (lexer.curr->getType() == Python3Parser::COMMA) {
+//        lexer.consume(Python3Parser::COMMA);
+//    }
+//
+//    return subscript_list;
 }
 
-Node *parseSubscript(PyLexer &lexer) {
+Subscript *parseSubscript(PyLexer &lexer) {
+    Subscript* subscript;
     if (isTest(lexer.curr)) {
+        subscript = new Subscript(nullptr, nullptr);
         const auto value = parseTest(lexer);
         if (lexer.curr->getType() == Python3Lexer::COLON) {
             lexer.consume(Python3Parser::COLON);
@@ -1524,15 +1565,16 @@ Node *parseSubscript(PyLexer &lexer) {
                     slice->step = parseTest(lexer);
                 }
             }
-            return slice;
+            subscript->slice = slice;
         } else {
             // just a mere constant
-            return value;
+            subscript->slice = new Index(value);
         }
-
     } else {
         ERR_MSG_EXIT("Expected TEST");
     }
+
+    return subscript;
 }
 
 Node *parseAtom(PyLexer &lexer) {
@@ -2030,7 +2072,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseAtom(lexer);
+    return parseFuncDef(lexer);
 }
 
 void destroyAst(Node *root) {

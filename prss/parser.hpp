@@ -54,7 +54,7 @@ struct YieldFrom;
 struct ExprList;
 struct Keyword;
 struct Import;
-struct Tuple;
+struct SubscriptList;
 struct ImportFrom;
 struct Raise;
 struct Subscript;
@@ -161,9 +161,9 @@ ClassDef *parseClassDef(PyLexer &lexer);
 
 Node *parseSuite(PyLexer &lexer);
 
-Node *parseSubscriptList(PyLexer &lexer);
+Subscript *parseSubscriptList(PyLexer &lexer);
 
-Node *parseSubscript(PyLexer &lexer);
+Subscript *parseSubscript(PyLexer &lexer);
 
 Node *parseStmt(PyLexer &lexer);
 
@@ -528,7 +528,6 @@ inline bool isCompOp(PyLexer &lexer) {
 }
 
 
-// AST nodes for P0 subset
 struct Node {
     // TODO(threadedstream): fill in the rest
 
@@ -543,6 +542,10 @@ struct Node {
     // n - child to add to the parent node
     // next_arg - needed for functions (likely to be removed)
     virtual void addChild(Node *n, const bool next_arg = false) noexcept {}
+
+    size_t line;
+    size_t col_start_idx;
+    size_t col_end_idx;
 };
 
 struct Module : public Node {
@@ -1080,11 +1083,12 @@ struct BinOp : public Node {
     int32_t op;
 };
 
-struct Tuple : public Node {
-    explicit Tuple(const std::vector<Node *> &nodes)
-            : nodes(nodes) {}
+struct SubscriptList : public Node {
+    explicit SubscriptList(Node *value, const std::vector<Node *> &subscripts)
+            : value(value), subscripts(subscripts) {}
 
-    std::vector<Node *> nodes;
+    std::vector<Node *> subscripts;
+    Node *value;
 };
 
 struct UnaryOp : public Node {
