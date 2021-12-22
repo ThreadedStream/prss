@@ -1373,13 +1373,22 @@ Node *parseAtomExpr(PyLexer &lexer) {
                 lexer.consume(Python3Parser::CLOSE_PAREN);
                 return call;
             }
+            case Python3Parser::OPEN_BRACK: {
+                lexer.consume(Python3Parser::OPEN_BRACK);
+                auto subscript = new Subscript(atom, nullptr);
+                subscript->slice = parseSubscriptList(lexer);
+                lexer.consume(Python3Parser::CLOSE_BRACK);
+                return subscript;
+            }
+            case Python3Parser::DOT: {
+            }
         }
     }
 
     return atom;
 }
 
-static Node *parseTestlistCompCommaSeparated(Node* value, PyLexer &lexer) {
+static Node *parseTestlistCompCommaSeparated(Node *value, PyLexer &lexer) {
     auto list = new List({value});
     while (lexer.curr->getType() == Python3Parser::COMMA) {
         lexer.consume(Python3Parser::COMMA);
@@ -1467,28 +1476,60 @@ Node *parseTestlistComp(PyLexer &lexer) {
     }
 }
 
-Subscript *parseSubscript(PyLexer &lexer) {
+Node *parseSubscriptList(PyLexer &lexer) {
+
     if (isTest(lexer.curr)) {
         const auto value = parseTest(lexer);
-        auto subscript = new Subscript(nullptr, nullptr);
         if (lexer.curr->getType() == Python3Lexer::COLON) {
             lexer.consume(Python3Parser::COLON);
-            subscript->slice = new Slice(value, nullptr, nullptr);
+            auto slice = new Slice(value, nullptr, nullptr);
             if (isTest(lexer.curr)) {
-                dynamic_cast<Slice*>(subscript->slice)->upper = parseTest(lexer);
+                slice->upper = parseTest(lexer);
             }
             if (lexer.curr->getType() == Python3Parser::COLON) {
                 lexer.consume(Python3Parser::COLON);
 
                 if (isTest(lexer.curr)) {
-                    dynamic_cast<Slice*>(subscript->slice)->lower = parseTest(lexer);
+                    slice->step = parseTest(lexer);
                 }
             }
+            return slice;
         } else {
-            subscript->slice = new Index(value);
+            // just a mere constant
+            return value;
         }
 
-        return subscript;
+    } else {
+        ERR_MSG_EXIT("Expected TEST");
+    }
+
+    if (lexer.curr->getType() == Python3Parser::COMMA) {
+
+    }
+}
+
+Node *parseSubscript(PyLexer &lexer) {
+    if (isTest(lexer.curr)) {
+        const auto value = parseTest(lexer);
+        if (lexer.curr->getType() == Python3Lexer::COLON) {
+            lexer.consume(Python3Parser::COLON);
+            auto slice = new Slice(value, nullptr, nullptr);
+            if (isTest(lexer.curr)) {
+                slice->upper = parseTest(lexer);
+            }
+            if (lexer.curr->getType() == Python3Parser::COLON) {
+                lexer.consume(Python3Parser::COLON);
+
+                if (isTest(lexer.curr)) {
+                    slice->step = parseTest(lexer);
+                }
+            }
+            return slice;
+        } else {
+            // just a mere constant
+            return value;
+        }
+
     } else {
         ERR_MSG_EXIT("Expected TEST");
     }
@@ -1892,7 +1933,6 @@ Node *parseDictorsetmaker(PyLexer &lexer) {
 }
 
 Node *parseTrailer(PyLexer &lexer) {
-    //const auto current_token = lexer.curr;
 
     switch (lexer.curr->getType()) {
         case Python3Parser::OPEN_PAREN: {
@@ -1921,15 +1961,19 @@ Node *parseTrailer(PyLexer &lexer) {
             }
             break;
         }
-        case Python3Parser::OPEN_BRACK:
-            // TODO(threadedstream): handle subscript
+        case Python3Parser::OPEN_BRACK: {
+            lexer.consume(Python3Parser::OPEN_BRACK);
+            auto subscript_list = parseSubscriptList(lexer);
+            lexer.consume(Python3Parser::CLOSE_BRACK);
+            return subscript_list;
+        }
+        case Python3Parser::DOT: {
             break;
-        case Python3Parser::DOT:
-            // TODO(threadedstream): handle class field access
+        }
+        default: {
+
             break;
-        default:
-            //TODO(threadedstream): throw an error or whatever...
-            break;
+        }
     }
 
     return nullptr;

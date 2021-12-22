@@ -54,6 +54,7 @@ struct YieldFrom;
 struct ExprList;
 struct Keyword;
 struct Import;
+struct Tuple;
 struct ImportFrom;
 struct Raise;
 struct Subscript;
@@ -160,7 +161,9 @@ ClassDef *parseClassDef(PyLexer &lexer);
 
 Node *parseSuite(PyLexer &lexer);
 
-Subscript *parseSubscript(PyLexer &lexer);
+Node *parseSubscriptList(PyLexer &lexer);
+
+Node *parseSubscript(PyLexer &lexer);
 
 Node *parseStmt(PyLexer &lexer);
 
@@ -1075,6 +1078,13 @@ struct BinOp : public Node {
     Node *left;
     Node *right;
     int32_t op;
+};
+
+struct Tuple : public Node {
+    explicit Tuple(const std::vector<Node *> &nodes)
+            : nodes(nodes) {}
+
+    std::vector<Node *> nodes;
 };
 
 struct UnaryOp : public Node {
