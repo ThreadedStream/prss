@@ -14,13 +14,11 @@ Parameters *parseParameters(PyLexer &lexer) {
 
 Parameter *parseParameter(PyLexer &lexer, const bool check_type = true) {
     const auto current_token = lexer.curr;
+    const auto pos_info = getTokPos(lexer);
     lexer.consume(Python3Parser::NAME);
 
     auto param = new Parameter(new Name(current_token->getText()), nullptr, nullptr);
-    param->line = current_token->getLine();
-    param->col_start_idx = current_token->getStartIndex();
-    param->col_end_idx = current_token->getStopIndex();
-
+    param->pos_info = pos_info;
     if (check_type && lexer.curr->getType() == Python3Parser::COLON) {
         lexer.consume(Python3Parser::COLON);
         param->type = parseTest(lexer);
@@ -748,6 +746,8 @@ Node *parseLambDefNoCond(PyLexer &lexer) {
     }
     lexer.consume(Python3Parser::COLON);
     lambda->body = parseTestNoCond(lexer);
+
+    return lambda;
 }
 
 TestList *parseTestlist(PyLexer &lexer) {
@@ -764,6 +764,44 @@ TestList *parseTestlist(PyLexer &lexer) {
     }
 
     return test_list;
+}
+
+
+// with_stmt: 'with' with_item (',' with_item)*  ':' suite;
+WithStmt *parseWithStmt(PyLexer &lexer) {
+    const auto current_token = lexer.curr;
+    lexer.consume(Python3Parser::WITH);
+
+    auto with_stmt = new WithStmt({}, nullptr, nullptr);
+    with_stmt->pos_info = getTokPos(current_token);
+
+    const auto with_item = parseWithItem(lexer);
+    with_stmt->items.push_back(with_item);
+
+    while (lexer.curr->getType() == Python3Parser::COMMA) {
+        lexer.consume(Python3Parser::COMMA);
+
+        const auto with_item = parseWithItem(lexer);
+        with_stmt->items.push_back(with_item);
+    }
+
+    lexer.consume(Python3Parser::COLON);
+    with_stmt->body = parseSuite(lexer);
+
+    return with_stmt;
+}
+
+// with_item: test ('as' expr)?;
+WithItem *parseWithItem(PyLexer &lexer) {
+    auto with_item = new WithItem(nullptr, nullptr);
+    with_item->context_expr = parseTest(lexer);
+
+    if (lexer.curr->getType() == Python3Parser::AS) {
+        lexer.consume(Python3Parser::AS);
+        with_item->optional_vars = parseExpr(lexer);
+    }
+
+    return with_item;
 }
 
 Return *parseReturnStmt(PyLexer &lexer) {
@@ -1033,7 +1071,24 @@ Node *parseOrTest(PyLexer &lexer) {
 }
 
 ForStmt *parseForStmt(PyLexer &lexer) {
-    return nullptr;
+    const auto pos_info = getTokPos(lexer);
+    lexer.consume(Python3Parser::FOR);
+
+    auto for_stmt = new ForStmt(nullptr, nullptr, nullptr, nullptr);
+    for_stmt->pos_info = pos_info;
+    for_stmt->target = parseExprList(lexer);
+    lexer.consume(Python3Parser::IN);
+    for_stmt->iter = parseTestlist(lexer);
+    lexer.consume(Python3Parser::COLON);
+    for_stmt->body = parseSuite(lexer);
+
+    if (lexer.curr->getType() == Python3Parser::ELSE) {
+        lexer.consume(Python3Parser::ELSE);
+        lexer.consume(Python3Parser::COLON);
+        for_stmt->or_else = parseSuite(lexer);
+    }
+
+    return for_stmt;
 }
 
 Node *parseAndTest(PyLexer &lexer) {
@@ -1488,6 +1543,8 @@ Node *parseTestlistComp(PyLexer &lexer) {
             const auto value = parseStarExpr(lexer);
             return parseTestlistCompCommaSeparated(value, lexer);
         }
+        default:
+            ERR_MSG_EXIT("Expected TEST or STAR");
     }
 }
 
@@ -1784,6 +1841,8 @@ static Node *parseDictorsetmakerTestColon(PyLexer &lexer) {
             }
             return dict;
         }
+        default:
+            ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
     }
 }
 
@@ -1843,6 +1902,8 @@ static Node *parseDictorsetmakerTest(PyLexer &lexer) {
             }
             return set;
         }
+        default:
+            ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
     }
 }
 
@@ -1929,7 +1990,7 @@ Node *parseDictorsetmaker(PyLexer &lexer) {
         case Python3Parser::STAR: {
             const auto value = parseStarExpr(lexer);
 
-            auto set = new Set({});
+            auto set = new Set({value});
             while (lexer.curr->getType() == Python3Parser::COMMA) {
                 lexer.consume(Python3Parser::COMMA);
 
@@ -2072,7 +2133,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseFuncDef(lexer);
+    return parseForStmt(lexer);
 }
 
 void destroyAst(Node *root) {

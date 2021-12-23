@@ -85,6 +85,7 @@ struct WhileStmt;
 struct ForStmt;
 struct TryStmt;
 struct WithStmt;
+struct WithItem;
 
 struct Delete;
 
@@ -120,6 +121,7 @@ Node *parseComparison(PyLexer &lexer);
 Node *parseExpr(PyLexer &lexer);
 
 ExprList *parseExprList(PyLexer &lexer);
+
 
 StarredExpr *parseStarExpr(PyLexer &lexer);
 
@@ -187,9 +189,13 @@ IfStmt *parseIfStmt(PyLexer &lexer, int32_t depth);
 
 WhileStmt *parseWhileStmt(PyLexer &lexer);
 
+WithItem *parseWithItem(PyLexer &lexer);
+
 WithStmt *parseWithStmt(PyLexer &lexer);
 
 ForStmt *parseForStmt(PyLexer &lexer);
+
+WithStmt *parseWithStmt(PyLexer &lexer);
 
 TryStmt *parseTryStmt(PyLexer &lexer);
 
@@ -361,7 +367,7 @@ namespace tok_utils {
 
 class PyLexer {
 public:
-    explicit PyLexer(const std::string &path) {
+    explicit PyLexer(const char *path) {
         std::ifstream stream(path);
         if (!stream) {
             throw std::runtime_error("path to the source is incorrect");
@@ -434,6 +440,21 @@ private:
     int32_t curr_idx_ = 0;
 };
 
+struct Position {
+    size_t line;
+    size_t col_start_idx;
+    size_t col_end_idx;
+} __attribute__((aligned(16)));
+
+
+inline Position getTokPos(const Token *tok) {
+    Position pos = {};
+    pos.line = tok->getLine();
+    pos.col_start_idx = tok->getStartIndex();
+    pos.col_end_idx = tok->getStopIndex();
+
+    return pos;
+}
 
 inline bool isAugAssign(const Token *tok) {
     const auto token_type = tok->getType();
@@ -452,6 +473,7 @@ inline bool isAugAssign(const Token *tok) {
            token_type == Python3Parser::POWER_ASSIGN ||
            token_type == Python3Parser::IDIV_ASSIGN;
 }
+
 
 inline bool isArithOp(const Token *tok) {
     const auto token_type = tok->getType();
@@ -543,9 +565,7 @@ struct Node {
     // next_arg - needed for functions (likely to be removed)
     virtual void addChild(Node *n, const bool next_arg = false) noexcept {}
 
-    size_t line;
-    size_t col_start_idx;
-    size_t col_end_idx;
+    Position pos_info;
 };
 
 struct Module : public Node {
@@ -664,26 +684,66 @@ struct SimpleStmt : public Node {
 };
 
 struct ForStmt : public Node {
-    explicit ForStmt() {}
+    explicit ForStmt(Node *target, Node *iter, Node *body, Node *or_else)
+            : target(target), iter(iter), body(body), or_else(or_else) {}
+
+    virtual std::vector<Node *> getChildren() const override {
+        return {target, iter, body, or_else};
+    }
+
+    Node *target;
+    Node *iter;
+    Node *body;
+    Node *or_else;
+};
+
+struct WithStmt : public Node {
+    explicit WithStmt(const std::vector<Node *> items, Node *body, Node *type_comment)
+            : body(body), type_comment(type_comment), items(items) {}
+
+    virtual std::vector<Node *> getChildren() const override {
+        // coalesce two vectors into the single one
+        std::vector<Node *> temp;
+        temp = items;
+        temp.push_back(body);
+        temp.push_back(type_comment);
+        return temp;
+    }
+
+    Node *body;
+    Node *type_comment;
+    std::vector<Node *> items;
+};
+
+struct WithItem : public Node {
+    explicit WithItem(Node *context_expr, Node *optional_vars)
+            : context_expr(context_expr), optional_vars(optional_vars) {}
+
+    virtual std::vector<Node *> getChildren() const override {
+        return {context_expr, optional_vars};
+    }
+
+    Node *context_expr;
+    Node *optional_vars;
 };
 
 struct TryStmt : public Node {
     explicit TryStmt(Node *body, std::vector<Node *> handlers, Node *or_else, Node *final_body)
-            : body(body), handlers(handlers), or_else(or_else), final_body(final_body) {}
+            : body(body), or_else(or_else), final_body(final_body), handlers(handlers) {}
 
     Node *body;
-    std::vector<Node *> handlers;
     Node *or_else;
     Node *final_body;
+    std::vector<Node *> handlers;
 };
 
 struct ExceptHandler : public Node {
     explicit ExceptHandler(Node *type, const std::string &name, Node *body)
-            : type(type), name(name), body(body) {}
+            : type(type), body(body), name(name) {}
 
     Node *type;
-    std::string name;
     Node *body;
+    std::string name;
 };
 
 struct ExprList : public Node {
@@ -1087,8 +1147,8 @@ struct SubscriptList : public Node {
     explicit SubscriptList(Node *value, const std::vector<Node *> &subscripts)
             : value(value), subscripts(subscripts) {}
 
-    std::vector<Node *> subscripts;
     Node *value;
+    std::vector<Node *> subscripts;
 };
 
 struct UnaryOp : public Node {

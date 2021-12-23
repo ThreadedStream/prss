@@ -1,2 +1,2 @@
-def f(x, y, z):
+with open('path') as stream:
     pass
