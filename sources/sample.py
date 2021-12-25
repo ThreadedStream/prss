@@ -1,2 +1,2 @@
-with open('path') as stream:
+async with open('hello') as stream:
     pass

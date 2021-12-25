@@ -157,9 +157,12 @@ Parameter *parseParameter(PyLexer &lexer, const bool check_type);
 
 Node *parseAsyncStmt(PyLexer &lexer);
 
-FuncDef *parseFuncDef(PyLexer &lexer);
+FuncDef *parseFuncDef(PyLexer &lexer, std::vector<Node *> &&decorator_list);
 
-ClassDef *parseClassDef(PyLexer &lexer);
+AsyncFuncDef *parseAsyncFuncDef(PyLexer &lexer, std::vector<Node *> &decorator_list);
+
+
+ClassDef *parseClassDef(PyLexer &lexer, std::vector<Node *> &&decorator_list);
 
 Node *parseSuite(PyLexer &lexer);
 
@@ -225,9 +228,13 @@ Delete *parseDelStmt(PyLexer &lexer);
 
 Pass *parsePassStmt(PyLexer &lexer);
 
-Name *parseDottedName(PyLexer &lexer);
+Node *parseDottedName(PyLexer &lexer, bool as_attr = false);
 
 Node *parseDecorated(PyLexer &lexer);
+
+Node *parseDecorator(PyLexer &lexer);
+
+std::vector<Node *> parseDecorators(PyLexer &lexer);
 
 Node *parseDict(PyLexer &lexer);
 
@@ -259,7 +266,7 @@ TestList *parseTestlist(PyLexer &lexer);
 
 Node *buildAst(PyLexer &lexer);
 
-void destroyAst(Node *root);
+void destroyNode(Node *root);
 
 namespace tok_utils {
     static std::map<int32_t, std::string> tokTypeToStr = {
@@ -441,7 +448,8 @@ private:
 };
 
 struct Position {
-    size_t line;
+    size_t line_start;
+    size_t line_end;
     size_t col_start_idx;
     size_t col_end_idx;
 } __attribute__((aligned(16)));
@@ -449,7 +457,7 @@ struct Position {
 
 inline Position getTokPos(const Token *tok) {
     Position pos = {};
-    pos.line = tok->getLine();
+    pos.line_start = tok->getLine();
     pos.col_start_idx = tok->getStartIndex();
     pos.col_end_idx = tok->getStopIndex();
 
@@ -559,7 +567,7 @@ struct Node {
         return "";
     }
 
-    virtual std::vector<Node *> getChildren() const { return {}; }
+    virtual std::vector<Node *> getChildren() { return {}; }
 
     // n - child to add to the parent node
     // next_arg - needed for functions (likely to be removed)
@@ -595,7 +603,7 @@ struct GeneratorExp : public Node {
     explicit GeneratorExp(Node *elt, std::vector<Node *> generators)
             : elt(elt), generators(generators) {}
 
-    virtual std::vector<Node *> getChildren() const {
+    virtual std::vector<Node *> getChildren() {
         auto temp = generators;
         temp.push_back(elt);
         return temp;
@@ -687,7 +695,7 @@ struct ForStmt : public Node {
     explicit ForStmt(Node *target, Node *iter, Node *body, Node *or_else)
             : target(target), iter(iter), body(body), or_else(or_else) {}
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {target, iter, body, or_else};
     }
 
@@ -701,7 +709,7 @@ struct WithStmt : public Node {
     explicit WithStmt(const std::vector<Node *> items, Node *body, Node *type_comment)
             : body(body), type_comment(type_comment), items(items) {}
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         // coalesce two vectors into the single one
         std::vector<Node *> temp;
         temp = items;
@@ -715,11 +723,28 @@ struct WithStmt : public Node {
     std::vector<Node *> items;
 };
 
+struct AsyncWithStmt : public Node {
+    explicit AsyncWithStmt(const std::vector<Node *> items, Node *body, Node *type_comment)
+            : body(body), type_comment(type_comment), items(items) {}
+
+    explicit AsyncWithStmt(WithStmt *with_stmt, bool destroy_with_stmt)
+            : body(with_stmt->body), type_comment(with_stmt->type_comment), items(with_stmt->items) {
+        if (destroy_with_stmt){
+            delete with_stmt;
+            with_stmt = nullptr;
+        }
+    }
+
+    Node *body;
+    Node *type_comment;
+    std::vector<Node *> items;
+};
+
 struct WithItem : public Node {
     explicit WithItem(Node *context_expr, Node *optional_vars)
             : context_expr(context_expr), optional_vars(optional_vars) {}
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {context_expr, optional_vars};
     }
 
@@ -762,14 +787,21 @@ struct Test : public Node {
 };
 
 struct ClassDef : public Node {
-    explicit ClassDef() {}
+    explicit ClassDef(const std::string &name, Arguments *arguments,
+                      Node *body, std::vector<Node *> decorator_list)
+            : body(body), arguments(arguments), decorator_list(decorator_list), name(name) {}
+
+    Node *body;
+    Arguments *arguments;
+    std::vector<Call *> decorator_list;
+    std::string name;
 };
 
 struct Attribute : public Node {
     explicit Attribute(Node *value, Node *attr)
             : value(value), attr(attr) {}
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {value, attr};
     }
 
@@ -788,7 +820,7 @@ struct IfStmt : public Node {
         return if_str.str();
     }
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {test, body, or_else};
     }
 
@@ -801,7 +833,7 @@ struct Import : public Node {
     explicit Import(Aliases *aliases)
             : aliases(aliases) {}
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {reinterpret_cast<Node *>(aliases)};
     }
 
@@ -809,10 +841,10 @@ struct Import : public Node {
 };
 
 struct ImportFrom : public Node {
-    explicit ImportFrom(Name *module, Aliases *aliases, int32_t level)
+    explicit ImportFrom(Node *module, Aliases *aliases, int32_t level)
             : module(module), aliases(aliases), level(level) {}
 
-    Name *module;
+    Node *module;
     Aliases *aliases;
     int32_t level;
 };
@@ -999,7 +1031,7 @@ struct Const : public Node {
         return const_str.str();
     }
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {};
     }
 
@@ -1011,7 +1043,7 @@ struct Arguments : public Node {
     explicit Arguments(const std::vector<Node *> &args, const std::vector<Node *> &keywords)
             : args(args), keywords(keywords) {}
 
-    virtual std::vector<Node *> getChildren() const {
+    virtual std::vector<Node *> getChildren() {
         // coalesce two vectors into the single one
         std::vector<Node *> temp;
         temp = args;
@@ -1052,7 +1084,7 @@ struct Argument : public Node {
         return arg_str.str();
     }
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {name, type, default_val};
     }
 
@@ -1074,7 +1106,7 @@ struct Parameter : public Node {
         return arg_str.str();
     }
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {name, type, default_val};
     }
 
@@ -1110,10 +1142,10 @@ struct Keyword : public Node {
 };
 
 struct Alias {
-    explicit Alias(Name *name, Name *as)
+    explicit Alias(Node *name, Name *as)
             : name(name), as(as) {}
 
-    Name *name;
+    Node *name;
     Name *as;
 };
 
@@ -1134,7 +1166,7 @@ struct BinOp : public Node {
         return bin_op_str.str();
     }
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {left, right};
     }
 
@@ -1161,7 +1193,7 @@ struct UnaryOp : public Node {
         return unary_op_str.str();
     }
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {expr};
     }
 
@@ -1182,7 +1214,7 @@ struct BoolOp : public Node {
         return bool_op_str.str();
     }
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {left, right};
     }
 
@@ -1209,22 +1241,63 @@ struct Comparison : public Node {
 };
 
 struct FuncDef : public Node {
-    explicit FuncDef(Name *name, Parameters *parameters, Node *body, Node *return_type) :
-            name(name), parameters(parameters), body(body), return_type(return_type) {};
+    explicit FuncDef(const std::string &name, Parameters *parameters, Node *body, Node *return_type,
+                     std::vector<Node *> decorator_list) :
+            name(name), parameters(parameters), body(body), return_type(return_type), decorator_list(decorator_list) {};
 
     std::string str() const noexcept override {
         std::ostringstream func_def_str;
-        func_def_str << "FuncDef(name=" << name->str() << ",arguments="
+        func_def_str << "FuncDef(name=" << name << ",arguments="
                      << parameters->str() << ",body=" << body->str()
                      << ",return_type=" << return_type->str();
 
         return func_def_str.str();
     }
 
-    Name *name;
+    virtual std::vector<Node *> getChildren() {
+        auto temp = decorator_list;
+        temp.push_back(parameters);
+        temp.push_back(body);
+        temp.push_back(return_type);
+    }
+
+    std::string name;
     Parameters *parameters;
     Node *body;
     Node *return_type;
+    std::vector<Node *> decorator_list;
+};
+
+struct AsyncFuncDef : public Node {
+    explicit AsyncFuncDef(const std::string &name, Parameters *parameters, Node *body, Node *return_type,
+                          const std::vector<Node *> &decorator_list,
+                          Node *type_comment)
+            : name(name), parameters(parameters), body(body), return_type(return_type), type_comment(type_comment),
+              decorator_list(decorator_list) {}
+
+    explicit AsyncFuncDef(FuncDef *func_def, bool destroy_func_def)
+            : name(func_def->name), parameters(func_def->parameters), body(func_def->body),
+              return_type(func_def->return_type), decorator_list(func_def->decorator_list) {
+        if (destroy_func_def) {
+            delete func_def;
+            func_def = nullptr;
+        }
+    }
+
+    virtual std::vector<Node *> getChildren() {
+        auto temp = decorator_list;
+        temp.push_back(parameters);
+        temp.push_back(body);
+        temp.push_back(return_type);
+        temp.push_back(type_comment);
+    }
+
+    std::string name;
+    Node *parameters;
+    Node *body;
+    Node *return_type;
+    Node *type_comment;
+    std::vector<Node *> decorator_list;
 };
 
 struct Lambda : public Node {
@@ -1232,7 +1305,7 @@ struct Lambda : public Node {
             : args(args), body(body) {}
 
 
-    virtual std::vector<Node *> getChildren() const override {
+    virtual std::vector<Node *> getChildren() override {
         return {args, body};
     }
 
@@ -1244,7 +1317,7 @@ struct Call : public Node {
     explicit Call(Node *func, Arguments *arguments)
             : func(func), arguments(arguments) {}
 
-    virtual std::vector<Node *> getChildren() const {
+    virtual std::vector<Node *> getChildren() {
         return {func, arguments};
     }
 

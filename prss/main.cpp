@@ -33,7 +33,7 @@ int main(int argc, const char *argv[]) {
     const auto ast_str = root->str();
     //dumpAntlrAst("/home/glasser/toys/prss/sources/sample.py");
 
-    destroyAst(root);
+    destroyNode(root);
 
     return 0;
 }

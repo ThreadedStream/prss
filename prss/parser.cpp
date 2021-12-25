@@ -14,11 +14,10 @@ Parameters *parseParameters(PyLexer &lexer) {
 
 Parameter *parseParameter(PyLexer &lexer, const bool check_type = true) {
     const auto current_token = lexer.curr;
-    const auto pos_info = getTokPos(lexer);
     lexer.consume(Python3Parser::NAME);
 
     auto param = new Parameter(new Name(current_token->getText()), nullptr, nullptr);
-    param->pos_info = pos_info;
+    param->pos_info = getTokPos(current_token);
     if (check_type && lexer.curr->getType() == Python3Parser::COLON) {
         lexer.consume(Python3Parser::COLON);
         param->type = parseTest(lexer);
@@ -294,12 +293,12 @@ Node *parseVarArgsList(PyLexer &lexer) {
 }
 
 
-FuncDef *parseFuncDef(PyLexer &lexer) {
+FuncDef *parseFuncDef(PyLexer &lexer, std::vector<Node *> &&decorator_list) {
     lexer.consume(Python3Parser::DEF);
 
     const auto current_token = lexer.curr;
     lexer.consume(Python3Parser::NAME);
-    auto func_def = new FuncDef(new Name(current_token->getText()), nullptr, nullptr, nullptr);
+    auto func_def = new FuncDef(current_token->getText(), nullptr, nullptr, nullptr, {});
 
     func_def->parameters = parseParameters(lexer);
 
@@ -311,8 +310,16 @@ FuncDef *parseFuncDef(PyLexer &lexer) {
     lexer.consume(Python3Parser::COLON);
 
     func_def->body = parseSuite(lexer);
+    func_def->decorator_list = std::move(decorator_list);
 
     return func_def;
+}
+
+AsyncFuncDef *parseAsyncFuncDef(PyLexer &lexer, std::vector<Node *> &&decorator_list) {
+    lexer.consume(Python3Parser::ASYNC);
+    auto async_func_def = new AsyncFuncDef(parseFuncDef(lexer, std::forward<std::vector<Node *>>(decorator_list)));
+
+    return async_func_def;
 }
 
 Delete *parseDelStmt(PyLexer &lexer) {
@@ -484,23 +491,45 @@ ImportFrom *parseImportFrom(PyLexer &lexer) {
     return import_from;
 }
 
-Name *parseDottedName(PyLexer &lexer) {
-    std::string name;
-    const auto current_token = lexer.curr;
-    lexer.consume(Python3Parser::NAME);
-
-    name += current_token->getText();
-
-    while (lexer.curr->getType() == Python3Parser::DOT) {
-        lexer.consume(Python3Parser::DOT);
+// "as_attr" parameter serves as an indicator for parseDottedName to
+// treat dotted name as a structure of attributes put one into another, rather than
+// a simple name
+Node *parseDottedName(PyLexer &lexer, bool as_attr) {
+    if (!as_attr) {
+        std::string name;
         const auto current_token = lexer.curr;
         lexer.consume(Python3Parser::NAME);
+
         name += current_token->getText();
+
+        while (lexer.curr->getType() == Python3Parser::DOT) {
+            lexer.consume(Python3Parser::DOT);
+            const auto current_token = lexer.curr;
+            lexer.consume(Python3Parser::NAME);
+            name += current_token->getText();
+        }
+
+        auto dotted_name = new Name(name);
+
+        return dotted_name;
+    } else {
+        const auto attr_value_token = lexer.curr;
+        lexer.consume(Python3Parser::NAME);
+        auto attribute = new Attribute(new Name(attr_value_token->getText()), nullptr);
+        lexer.consume(Python3Parser::DOT);
+        const auto attr_attr_token = lexer.curr;
+        lexer.consume(Python3Parser::NAME);
+        attribute->attr = new Name(attr_attr_token->getText());
+
+        while (lexer.curr->getType() == Python3Parser::DOT) {
+            lexer.consume(Python3Parser::DOT);
+            const auto attr_attr_token = lexer.curr;
+            lexer.consume(Python3Parser::NAME);
+            attribute = new Attribute(attribute, new Name(attr_attr_token->getText()));
+        }
+
+        return attribute;
     }
-
-    auto dotted_name = new Name(name);
-
-    return dotted_name;
 }
 
 Alias *parseDottedAsName(PyLexer &lexer) {
@@ -651,9 +680,9 @@ Node *parseCompoundStmt(PyLexer &lexer) {
         case Python3Parser::TRY:
             return parseTryStmt(lexer);
         case Python3Parser::DEF:
-            return parseFuncDef(lexer);
+            return parseFuncDef(lexer, {});
         case Python3Parser::CLASS:
-            return parseClassDef(lexer);
+            return parseClassDef(lexer, {});
         case Python3Parser::AT:
             return parseDecorated(lexer);
         case Python3Parser::ASYNC:
@@ -663,8 +692,26 @@ Node *parseCompoundStmt(PyLexer &lexer) {
     }
 }
 
-ClassDef *parseClassDef(PyLexer &lexer) {
-    return nullptr;
+// classdef: 'class' NAME ('(' (arglist)? ')')? ':' suite;
+ClassDef *parseClassDef(PyLexer &lexer, std::vector<Node *> &&decorator_list) {
+    const auto line_start = lexer.curr->getLine();
+    const auto col_start = lexer.curr->getStartIndex();
+    lexer.consume(Python3Parser::CLASS);
+
+    const auto class_name = lexer.curr->getText();
+    Arguments *arglist;
+    lexer.consume(Python3Parser::NAME);
+    if (lexer.curr->getType() == Python3Parser::OPEN_PAREN) {
+        lexer.consume(Python3Parser::OPEN_PAREN);
+        arglist = parseArglist(lexer);
+        lexer.consume(Python3Parser::CLOSE_PAREN);
+    }
+
+    lexer.consume(Python3Parser::COLON);
+    const auto body = parseSuite(lexer);
+    auto class_def = new ClassDef(class_name, arglist, body, std::move(decorator_list));
+
+    return class_def;
 }
 
 Node *parseSuite(PyLexer &lexer) {
@@ -1049,12 +1096,56 @@ ExceptHandler *parseExceptClause(PyLexer &lexer) {
 }
 
 
+Node *parseDecorator(PyLexer &lexer) {
+    lexer.consume(Python3Parser::AT);
+    auto call = new Call(nullptr, nullptr);
+    call->func = parseDottedName(lexer, true);
+    if (lexer.curr->getType() == Python3Parser::OPEN_PAREN) {
+        lexer.consume(Python3Parser::OPEN_PAREN);
+        call->arguments = parseArglist(lexer);
+        lexer.consume(Python3Parser::CLOSE_PAREN);
+    }
+
+    lexer.consume(Python3Parser::NEWLINE);
+
+    return call;
+}
+
+std::vector<Node*> parseDecorators(PyLexer &lexer) {
+    std::vector<Node*> decorators;
+    while (lexer.curr->getType() == Python3Parser::AT) {
+        decorators.push_back(parseDecorator(lexer));
+    }
+
+    return decorators;
+}
+
 Node *parseDecorated(PyLexer &lexer) {
-    return nullptr;
+    auto decorator_list = parseDecorators(lexer);
+
+    switch (lexer.curr->getType()) {
+        case Python3Parser::CLASS:
+            return parseClassDef(lexer, std::forward<std::vector<Node*>>(decorator_list));
+        case Python3Parser::ASYNC:
+            return parseAsyncFuncDef(lexer, decorator_list);
+        case Python3Parser::DEF:
+            return parseFuncDef(lexer, std::forward<std::vector<Node*>>(decorator_list));
+        default:
+            ERR_MSG_EXIT("Expected CLASS, ASYNC or DEF");
+    }
 }
 
 Node *parseAsyncStmt(PyLexer &lexer) {
-    return nullptr;
+    lexer.consume(Python3Parser::ASYNC);
+
+    switch (lexer.curr->getType()) {
+        case Python3Parser::DEF:
+            return parseAsyncFuncDef(lexer, {});
+        case Python3Parser::WITH:
+            return parseAsyncWithStmt(lexer);
+        case Python3Parser::FOR:
+            return parseAsyncForStmt(lexer);
+    }
 }
 
 Node *parseOrTest(PyLexer &lexer) {
@@ -1071,7 +1162,7 @@ Node *parseOrTest(PyLexer &lexer) {
 }
 
 ForStmt *parseForStmt(PyLexer &lexer) {
-    const auto pos_info = getTokPos(lexer);
+    const auto pos_info = getTokPos(lexer.curr);
     lexer.consume(Python3Parser::FOR);
 
     auto for_stmt = new ForStmt(nullptr, nullptr, nullptr, nullptr);
@@ -1451,7 +1542,7 @@ Node *parseAtomExpr(PyLexer &lexer) {
                 atom = attribute;
             }
             default:
-                ERR_MSG_EXIT("Expected OPEN_PAREN, OPEN_BRACK or DOT");
+            ERR_MSG_EXIT("Expected OPEN_PAREN, OPEN_BRACK or DOT");
         }
     }
 
@@ -1544,7 +1635,7 @@ Node *parseTestlistComp(PyLexer &lexer) {
             return parseTestlistCompCommaSeparated(value, lexer);
         }
         default:
-            ERR_MSG_EXIT("Expected TEST or STAR");
+        ERR_MSG_EXIT("Expected TEST or STAR");
     }
 }
 
@@ -1605,7 +1696,7 @@ Subscript *parseSubscriptList(PyLexer &lexer) {
 }
 
 Subscript *parseSubscript(PyLexer &lexer) {
-    Subscript* subscript;
+    Subscript *subscript;
     if (isTest(lexer.curr)) {
         subscript = new Subscript(nullptr, nullptr);
         const auto value = parseTest(lexer);
@@ -1842,7 +1933,7 @@ static Node *parseDictorsetmakerTestColon(PyLexer &lexer) {
             return dict;
         }
         default:
-            ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
+        ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
     }
 }
 
@@ -1903,7 +1994,7 @@ static Node *parseDictorsetmakerTest(PyLexer &lexer) {
             return set;
         }
         default:
-            ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
+        ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
     }
 }
 
@@ -2133,17 +2224,17 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseForStmt(lexer);
+    return parseDecorator(lexer);
 }
 
-void destroyAst(Node *root) {
+void destroyNode(Node *root) {
     if (!root) return;
     if (root->getChildren().empty()) {
         delete root;
     } else {
         // destroy all children
         for (const auto &child: root->getChildren()) {
-            destroyAst(child);
+            destroyNode(child);
         }
 
         // and only then destroy the parent
