@@ -83,8 +83,10 @@ struct Nonlocal;
 struct IfStmt;
 struct WhileStmt;
 struct ForStmt;
+struct AsyncForStmt;
 struct TryStmt;
 struct WithStmt;
+struct AsyncWithStmt;
 struct WithItem;
 
 struct Delete;
@@ -122,12 +124,13 @@ Node *parseExpr(PyLexer &lexer);
 
 ExprList *parseExprList(PyLexer &lexer);
 
-
 StarredExpr *parseStarExpr(PyLexer &lexer);
 
 Node *parseXorExpr(PyLexer &lexer);
 
 Node *parseAndExpr(PyLexer &lexer);
+
+Node *parseAsyncForStmt(PyLexer &lexer);
 
 Node *parseShiftExpr(PyLexer &lexer);
 
@@ -161,6 +164,7 @@ FuncDef *parseFuncDef(PyLexer &lexer, std::vector<Node *> &&decorator_list);
 
 AsyncFuncDef *parseAsyncFuncDef(PyLexer &lexer, std::vector<Node *> &decorator_list);
 
+AsyncWithStmt *parseAsyncWithStmt(PyLexer &lexer);
 
 ClassDef *parseClassDef(PyLexer &lexer, std::vector<Node *> &&decorator_list);
 
@@ -585,6 +589,10 @@ struct Module : public Node {
         return module_str.str();
     }
 
+    virtual std::vector<Node *> getChildren() {
+        return {expr};
+    }
+
     Node *expr;
     std::string doc;
 };
@@ -592,6 +600,13 @@ struct Module : public Node {
 struct Comprehension : public Node {
     explicit Comprehension(Node *target, Node *iter, std::vector<Node *> ifs, bool is_async)
             : target(target), iter(iter), ifs(ifs), is_async(is_async) {}
+
+
+    virtual std::vector<Node *> getChildren() {
+        auto temp = ifs;
+        temp.push_back(target);
+        temp.push_back(iter);
+    }
 
     Node *target;
     Node *iter;
@@ -617,6 +632,12 @@ struct Dict : public Node {
     explicit Dict(std::vector<Node *> keys, std::vector<Node *> values)
             : keys(keys), values(values) {}
 
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = keys;
+        temp.insert(temp.end(), values.begin(), values.end());
+        return temp;
+    }
+
     std::vector<Node *> keys;
     std::vector<Node *> values;
 };
@@ -624,6 +645,14 @@ struct Dict : public Node {
 struct DictComp : public Node {
     explicit DictComp(Node *key, Node *value, const std::vector<Node *> &generators)
             : key(key), value(value), generators(generators) {}
+
+
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = generators;
+        temp.push_back(key);
+        temp.push_back(value);
+        return temp;
+    }
 
     Node *key;
     Node *value;
@@ -634,12 +663,22 @@ struct Set : public Node {
     explicit Set(const std::vector<Node *> &elements)
             : elements(elements) {}
 
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = elements;
+        return temp;
+    }
+
     std::vector<Node *> elements;
 };
 
 struct List : public Node {
     explicit List(const std::vector<Node *> &elements)
             : elements(elements) {}
+
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = elements;
+        return temp;
+    }
 
     std::vector<Node *> elements;
 };
@@ -648,6 +687,13 @@ struct ListComp : public Node {
     explicit ListComp(Node *value, const std::vector<Node *> &generators)
             : value(value), generators(generators) {}
 
+
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = generators;
+        generators.push_back(value);
+        return temp;
+    }
+
     Node *value;
     std::vector<Node *> generators;
 };
@@ -655,6 +701,12 @@ struct ListComp : public Node {
 struct SetComp : public Node {
     explicit SetComp(Node *value, const std::vector<Node *> &generators)
             : value(value), generators(generators) {}
+
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = generators;
+        generators.push_back(value);
+        return temp;
+    }
 
     Node *value;
     std::vector<Node *> generators;
@@ -676,8 +728,9 @@ struct Stmt : public Node {
         return stmt_str.str();
     }
 
-    std::vector<Node *> getChildren() const {
-        return nodes;
+    virtual std::vector<Node *> getChildren() {
+        auto temp =  nodes;
+        return temp;
     }
 
     std::vector<Node *> nodes;
@@ -705,14 +758,36 @@ struct ForStmt : public Node {
     Node *or_else;
 };
 
+struct AsyncForStmt : public Node {
+    explicit AsyncForStmt(Node *target, Node *iter, Node *body, Node *or_else)
+    : target(target), iter(iter), body(body), or_else(or_else) {}
+
+    explicit AsyncForStmt(ForStmt *for_stmt, bool destroy_for_stmt):
+            target(for_stmt->target), iter(for_stmt->iter), body(for_stmt->body), or_else(for_stmt->or_else) {
+        if (destroy_for_stmt) {
+            delete for_stmt;
+            for_stmt = nullptr;
+        }
+    }
+
+    virtual std::vector<Node *> getChildren() override {
+        return {target, iter, body, or_else};
+    }
+
+
+    Node *target;
+    Node *iter;
+    Node *body;
+    Node *or_else;
+};
+
 struct WithStmt : public Node {
     explicit WithStmt(const std::vector<Node *> items, Node *body, Node *type_comment)
             : body(body), type_comment(type_comment), items(items) {}
 
     virtual std::vector<Node *> getChildren() override {
         // coalesce two vectors into the single one
-        std::vector<Node *> temp;
-        temp = items;
+        auto temp = items;
         temp.push_back(body);
         temp.push_back(type_comment);
         return temp;
@@ -756,6 +831,15 @@ struct TryStmt : public Node {
     explicit TryStmt(Node *body, std::vector<Node *> handlers, Node *or_else, Node *final_body)
             : body(body), or_else(or_else), final_body(final_body), handlers(handlers) {}
 
+
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = handlers;
+        temp.push_back(body);
+        temp.push_back(or_else);
+        temp.push_back(final_body);
+        return temp;
+    }
+
     Node *body;
     Node *or_else;
     Node *final_body;
@@ -765,6 +849,10 @@ struct TryStmt : public Node {
 struct ExceptHandler : public Node {
     explicit ExceptHandler(Node *type, const std::string &name, Node *body)
             : type(type), body(body), name(name) {}
+
+    virtual std::vector<Node *> getChildren() override {
+        return {type, body};
+    }
 
     Node *type;
     Node *body;
@@ -779,11 +867,12 @@ struct ExprList : public Node {
         return "";
     }
 
-    std::vector<Node *> expr_list;
-};
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = expr_list;
+        return temp;
+    }
 
-struct Test : public Node {
-    explicit Test();
+    std::vector<Node *> expr_list;
 };
 
 struct ClassDef : public Node {
@@ -791,9 +880,16 @@ struct ClassDef : public Node {
                       Node *body, std::vector<Node *> decorator_list)
             : body(body), arguments(arguments), decorator_list(decorator_list), name(name) {}
 
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = decorator_list;
+        temp.push_back(body);
+        temp.push_back(dynamic_cast<Node*>(arguments));
+        return temp;
+    }
+
     Node *body;
     Arguments *arguments;
-    std::vector<Call *> decorator_list;
+    std::vector<Node *> decorator_list;
     std::string name;
 };
 
@@ -834,7 +930,7 @@ struct Import : public Node {
             : aliases(aliases) {}
 
     virtual std::vector<Node *> getChildren() override {
-        return {reinterpret_cast<Node *>(aliases)};
+        return {dynamic_cast<Node *>(aliases)};
     }
 
     Aliases *aliases;
@@ -843,6 +939,10 @@ struct Import : public Node {
 struct ImportFrom : public Node {
     explicit ImportFrom(Node *module, Aliases *aliases, int32_t level)
             : module(module), aliases(aliases), level(level) {}
+
+    virtual std::vector<Node *> getChildren() override {
+        return {module, dynamic_cast<Node *>(aliases)};
+    }
 
     Node *module;
     Aliases *aliases;
@@ -861,6 +961,11 @@ struct TestList : public Node {
         return test_list_str.str();
     }
 
+    virtual std::vector<Node *> getChildren() override {
+        auto temp = nodes;
+        return temp;
+    }
+
     std::vector<Node *> nodes;
 };
 
@@ -874,6 +979,10 @@ struct Return : public Node {
         std::ostringstream return_str;
         return_str << "Return(expr=" << test_list->str() << ")";
         return return_str.str();
+    }
+
+    virtual std::vector<Node *> getChildren() override {
+        return {test_list};
     }
 
     TestList *test_list;
@@ -891,23 +1000,36 @@ struct Assign : public Node {
     explicit Assign(TestList *targets, Node *value)
             : targets(targets), value(value) {}
 
+    virtual std::vector<Node *> getChildren() override {
+        return {targets, value};
+    }
+
     TestList *targets;
     Node *value;
 };
 
 struct AugAssign : public Node {
     explicit AugAssign(Node *target, const int32_t op, Node *value)
-            : target(target), op(op), value(value) {}
+            : target(target), value(value), op(op)  {}
+
+
+    virtual std::vector<Node *> getChildren() override {
+        return {target, value};
+    }
 
     Node *target;
-    int32_t op;
     Node *value;
+    int32_t op;
 };
 
 
 struct AnnAssign : public Node {
     explicit AnnAssign(Node *target, Node *annotation, Node *value)
             : target(target), annotation(annotation), value(value) {}
+
+    virtual std::vector<Node *> getChildren() override {
+        return {target, annotation, value};
+    }
 
     Node *target;
     Node *annotation;

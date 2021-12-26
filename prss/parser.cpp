@@ -317,17 +317,14 @@ FuncDef *parseFuncDef(PyLexer &lexer, std::vector<Node *> &&decorator_list) {
 
 AsyncFuncDef *parseAsyncFuncDef(PyLexer &lexer, std::vector<Node *> &&decorator_list) {
     lexer.consume(Python3Parser::ASYNC);
-    auto async_func_def = new AsyncFuncDef(parseFuncDef(lexer, std::forward<std::vector<Node *>>(decorator_list)));
-
+    auto async_func_def = new AsyncFuncDef(parseFuncDef(lexer, std::forward<std::vector<Node *>>(decorator_list)), true);
     return async_func_def;
 }
 
 Delete *parseDelStmt(PyLexer &lexer) {
     lexer.consume(Python3Parser::DEL);
-
     auto node = new Delete(nullptr);
     node->targets = parseExprList(lexer);
-
     return node;
 }
 
@@ -1032,7 +1029,6 @@ TryStmt *parseTryStmt(PyLexer &lexer) {
                 auto except_handler = parseExceptClause(lexer);
                 lexer.consume(Python3Parser::COLON);
                 except_handler->body = parseSuite(lexer);
-
                 try_stmt->handlers.push_back(except_handler);
             }
 
@@ -1146,6 +1142,24 @@ Node *parseAsyncStmt(PyLexer &lexer) {
         case Python3Parser::FOR:
             return parseAsyncForStmt(lexer);
     }
+}
+
+AsyncFuncDef *parseAsyncFuncDef(PyLexer &lexer, std::vector<Node *> &decorator_list) {
+    lexer.consume(Python3Parser::ASYNC);
+    const auto async_func_def = new AsyncFuncDef(parseFuncDef(lexer, std::forward<std::vector<Node*>>(decorator_list)), true);
+    return async_func_def;
+}
+
+Node *parseAsyncForStmt(PyLexer &lexer) {
+    lexer.consume(Python3Parser::ASYNC);
+    auto async_for_stmt = new AsyncForStmt(parseForStmt(lexer), true);
+    return async_for_stmt;
+}
+
+AsyncWithStmt *parseAsyncWithStmt(PyLexer &lexer) {
+    lexer.consume(Python3Parser::ASYNC);
+    const auto async_with_stmt = new AsyncWithStmt(parseWithStmt(lexer), true);
+    return async_with_stmt;
 }
 
 Node *parseOrTest(PyLexer &lexer) {
@@ -1829,7 +1843,6 @@ Node *parseAtom(PyLexer &lexer) {
     return node;
 }
 
-
 Node *parseCompFor(PyLexer &lexer) {
     auto comp_for = new Comprehension(nullptr, nullptr, {}, false);
     if (lexer.curr->getType() == Python3Parser::ASYNC) {
@@ -2224,7 +2237,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseDecorator(lexer);
+    return parseAsyncFuncDef(lexer, {});
 }
 
 void destroyNode(Node *root) {

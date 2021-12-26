@@ -1,2 +1,2 @@
-async with open('hello') as stream:
+async for i in range(20):
     pass
