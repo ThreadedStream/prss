@@ -1,7 +1,8 @@
 #include "parser.hpp"
 
 
-void dumpAntlrAst(const std::string& path) {
+
+void parseAntlr(const std::string& path) {
     std::ifstream in_stream(path);
 
     if (!in_stream) {
@@ -13,9 +14,9 @@ void dumpAntlrAst(const std::string& path) {
 
     Python3Parser py_parser(&tokens);
 
-    const auto tree = py_parser.atom_expr();
+    const auto tree = py_parser.file_input();
 
-    std::cout << tree->toStringTree(true) << '\n';
+    const auto statements = tree->stmt();
 
     in_stream.close();
 }
@@ -30,8 +31,9 @@ int main(int argc, const char *argv[]) {
     PyLexer lexer(argv[1]);
 
     auto root = buildAst(lexer);
-    const auto ast_str = root->str();
-    //dumpAntlrAst("/home/glasser/toys/prss/sources/sample.py");
+
+    //const auto ast_str = root->str();
+    //parseAntlr("/home/glasser/toys/prss/sources/sample.py");
 
     destroyNode(root);
 

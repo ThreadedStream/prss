@@ -1,6 +1,117 @@
 #include "parser.hpp"
 
 
+Node *parseSingleInput(PyLexer &lexer) {
+    switch (lexer.curr->getType()) {
+        case Python3Parser::NEWLINE: {
+            lexer.consume(Python3Parser::NEWLINE);
+            break;
+        }
+        case Python3Parser::STRING:
+        case Python3Parser::NUMBER:
+        case Python3Parser::RETURN:
+        case Python3Parser::RAISE:
+        case Python3Parser::FROM:
+        case Python3Parser::IMPORT:
+        case Python3Parser::GLOBAL:
+        case Python3Parser::NONLOCAL:
+        case Python3Parser::ASSERT:
+        case Python3Parser::LAMBDA:
+        case Python3Parser::NOT:
+        case Python3Parser::NONE:
+        case Python3Parser::TRUE:
+        case Python3Parser::FALSE:
+        case Python3Parser::YIELD:
+        case Python3Parser::DEL:
+        case Python3Parser::PASS:
+        case Python3Parser::CONTINUE:
+        case Python3Parser::BREAK:
+        case Python3Parser::AWAIT:
+        case Python3Parser::NAME:
+        case Python3Parser::ELLIPSIS:
+        case Python3Parser::STAR:
+        case Python3Parser::OPEN_PAREN:
+        case Python3Parser::OPEN_BRACK:
+        case Python3Parser::ADD:
+        case Python3Parser::MINUS:
+        case Python3Parser::NOT_OP:
+        case Python3Parser::OPEN_BRACE: {
+            return parseSimpleStmt(lexer);
+        }
+        case Python3Parser::DEF:
+        case Python3Parser::IF:
+        case Python3Parser::WHILE:
+        case Python3Parser::FOR:
+        case Python3Parser::TRY:
+        case Python3Parser::WITH:
+        case Python3Parser::CLASS:
+        case Python3Parser::ASYNC:
+        case Python3Parser::AT: {
+            const auto comp_stmt = parseCompoundStmt(lexer);
+            lexer.consume(Python3Parser::NEWLINE);
+            return comp_stmt;
+        }
+    }
+
+    return nullptr;
+}
+
+Node *parseFileInput(PyLexer &lexer) {
+    auto file_input = new FileInput({});
+    while (isStmt(lexer.curr)) {
+        switch (lexer.curr->getType()) {
+            case Python3Parser::NEWLINE: {
+                lexer.consume(Python3Parser::NEWLINE);
+                break;
+            }
+            case Python3Parser::STRING:
+            case Python3Parser::NUMBER:
+            case Python3Parser::DEF:
+            case Python3Parser::RETURN:
+            case Python3Parser::RAISE:
+            case Python3Parser::FROM:
+            case Python3Parser::IMPORT:
+            case Python3Parser::GLOBAL:
+            case Python3Parser::NONLOCAL:
+            case Python3Parser::ASSERT:
+            case Python3Parser::IF:
+            case Python3Parser::WHILE:
+            case Python3Parser::FOR:
+            case Python3Parser::TRY:
+            case Python3Parser::WITH:
+            case Python3Parser::LAMBDA:
+            case Python3Parser::NOT:
+            case Python3Parser::NONE:
+            case Python3Parser::TRUE:
+            case Python3Parser::FALSE:
+            case Python3Parser::CLASS:
+            case Python3Parser::YIELD:
+            case Python3Parser::DEL:
+            case Python3Parser::PASS:
+            case Python3Parser::CONTINUE:
+            case Python3Parser::BREAK:
+            case Python3Parser::ASYNC:
+            case Python3Parser::AWAIT:
+            case Python3Parser::NAME:
+            case Python3Parser::ELLIPSIS:
+            case Python3Parser::STAR:
+            case Python3Parser::OPEN_PAREN:
+            case Python3Parser::OPEN_BRACK:
+            case Python3Parser::ADD:
+            case Python3Parser::MINUS:
+            case Python3Parser::NOT_OP:
+            case Python3Parser::OPEN_BRACE:
+            case Python3Parser::AT: {
+                file_input->statements.push_back(parseStmt(lexer));
+                break;
+            }
+        }
+    }
+
+    return file_input;
+}
+
+
 Parameters *parseParameters(PyLexer &lexer) {
     Parameters *parameters;
     lexer.consume(Python3Parser::OPEN_PAREN);
@@ -98,6 +209,7 @@ Parameters *parseTypedArgsList(PyLexer &lexer) {
                             lexer.consume(Python3Parser::COMMA);
 
                             if (lexer.curr->getType() == Python3Parser::POWER) {
+                                lexer.consume(Python3Parser::POWER);
                                 parameters->extra.kwarg = parseParameter(lexer, true);
                             }
                         }
@@ -156,6 +268,7 @@ Parameters *parseTypedArgsList(PyLexer &lexer) {
             if (lexer.curr->getType() == Python3Parser::COMMA) {
                 lexer.consume(Python3Parser::COMMA);
             }
+            break;
         }
         default:
         ERR_MSG_EXIT("Expected NAME, STAR or POWER");
@@ -317,7 +430,8 @@ FuncDef *parseFuncDef(PyLexer &lexer, std::vector<Node *> &&decorator_list) {
 
 AsyncFuncDef *parseAsyncFuncDef(PyLexer &lexer, std::vector<Node *> &&decorator_list) {
     lexer.consume(Python3Parser::ASYNC);
-    auto async_func_def = new AsyncFuncDef(parseFuncDef(lexer, std::forward<std::vector<Node *>>(decorator_list)), true);
+    auto async_func_def = new AsyncFuncDef(parseFuncDef(lexer, std::forward<std::vector<Node *>>(decorator_list)),
+                                           true);
     return async_func_def;
 }
 
@@ -361,6 +475,7 @@ Node *parseSmallStmt(PyLexer &lexer) {
             return parseNonlocalStmt(lexer);
         case Python3Parser::GLOBAL:
             return parseGlobalStmt(lexer);
+        case Python3Parser::FROM:
         case Python3Parser::IMPORT:
             return parseImportStmt(lexer);
         case Python3Parser::PASS:
@@ -601,14 +716,14 @@ Alias *parseImportAsName(PyLexer &lexer) {
     auto name = new Name(lexer.curr->getText());
 
     lexer.consume(Python3Parser::NAME);
-    lexer.consume(Python3Parser::AS);
-
-    auto as = new Name(lexer.curr->getText());
-
-    lexer.consume(Python3Parser::NAME);
+    if (lexer.curr->getType() == Python3Parser::AS) {
+        lexer.consume(Python3Parser::AS);
+        auto as = new Name(lexer.curr->getText());
+        lexer.consume(Python3Parser::NAME);
+        alias->as = as;
+    }
 
     alias->name = name;
-    alias->as = as;
 
     return alias;
 }
@@ -708,6 +823,10 @@ ClassDef *parseClassDef(PyLexer &lexer, std::vector<Node *> &&decorator_list) {
     const auto body = parseSuite(lexer);
     auto class_def = new ClassDef(class_name, arglist, body, std::move(decorator_list));
 
+    // temporary
+    (void) line_start;
+    (void) col_start;
+
     return class_def;
 }
 
@@ -715,7 +834,13 @@ Node *parseSuite(PyLexer &lexer) {
     if (lexer.curr->getType() == Python3Parser::NEWLINE) {
         lexer.consume(Python3Parser::NEWLINE);
         lexer.consume(Python3Parser::INDENT);
-        const auto stmt = parseStmt(lexer);
+        if (!isStmt(lexer.curr)) {
+            ERR_MSG_EXIT("should be a statement");
+        }
+        auto stmt = new Stmt({});
+        while (isStmt(lexer.curr)) {
+            stmt->nodes.push_back(parseStmt(lexer));
+        }
         lexer.consume(Python3Parser::DEDENT);
         return stmt;
     } else {
@@ -1107,8 +1232,8 @@ Node *parseDecorator(PyLexer &lexer) {
     return call;
 }
 
-std::vector<Node*> parseDecorators(PyLexer &lexer) {
-    std::vector<Node*> decorators;
+std::vector<Node *> parseDecorators(PyLexer &lexer) {
+    std::vector<Node *> decorators;
     while (lexer.curr->getType() == Python3Parser::AT) {
         decorators.push_back(parseDecorator(lexer));
     }
@@ -1121,13 +1246,13 @@ Node *parseDecorated(PyLexer &lexer) {
 
     switch (lexer.curr->getType()) {
         case Python3Parser::CLASS:
-            return parseClassDef(lexer, std::forward<std::vector<Node*>>(decorator_list));
+            return parseClassDef(lexer, std::forward<std::vector<Node *>>(decorator_list));
         case Python3Parser::ASYNC:
             return parseAsyncFuncDef(lexer, decorator_list);
         case Python3Parser::DEF:
-            return parseFuncDef(lexer, std::forward<std::vector<Node*>>(decorator_list));
+            return parseFuncDef(lexer, std::forward<std::vector<Node *>>(decorator_list));
         default:
-            ERR_MSG_EXIT("Expected CLASS, ASYNC or DEF");
+        ERR_MSG_EXIT("Expected CLASS, ASYNC or DEF");
     }
 }
 
@@ -1141,12 +1266,15 @@ Node *parseAsyncStmt(PyLexer &lexer) {
             return parseAsyncWithStmt(lexer);
         case Python3Parser::FOR:
             return parseAsyncForStmt(lexer);
+        default:
+        ERR_MSG_EXIT("Expected DEF, WITH or FOR");
     }
 }
 
 AsyncFuncDef *parseAsyncFuncDef(PyLexer &lexer, std::vector<Node *> &decorator_list) {
     lexer.consume(Python3Parser::ASYNC);
-    const auto async_func_def = new AsyncFuncDef(parseFuncDef(lexer, std::forward<std::vector<Node*>>(decorator_list)), true);
+    const auto async_func_def = new AsyncFuncDef(
+            parseFuncDef(lexer, std::forward<std::vector<Node *>>(decorator_list)), true);
     return async_func_def;
 }
 
@@ -1216,10 +1344,27 @@ Node *parseNotTest(PyLexer &lexer) {
             lexer.consume(Python3Parser::NOT);
             const auto expr = parseNotTest(lexer);
             node = new UnaryOp(Python3Parser::NOT, expr);
-        }
             break;
-        default:
+        }
+        case Python3Parser::STRING:
+        case Python3Parser::NUMBER:
+        case Python3Parser::NONE:
+        case Python3Parser::TRUE:
+        case Python3Parser::FALSE:
+        case Python3Parser::AWAIT:
+        case Python3Parser::NAME:
+        case Python3Parser::ELLIPSIS:
+        case Python3Parser::OPEN_PAREN:
+        case Python3Parser::OPEN_BRACK:
+        case Python3Parser::ADD:
+        case Python3Parser::MINUS:
+        case Python3Parser::NOT_OP:
+        case Python3Parser::OPEN_BRACE: {
             node = parseComparison(lexer);
+            break;
+        }
+        default:
+            ERR_MSG_EXIT("expected NOT or EXPR");
     }
 
     return node;
@@ -1493,12 +1638,14 @@ Node *parseShiftExpr(PyLexer &lexer) {
 Node *parseComparison(PyLexer &lexer) {
     auto node = parseExpr(lexer);
 
-    while (isCompOp(lexer)) {
-        const auto current_token = lexer.curr;
-        lexer.consume(current_token->getType());
-
+    bool eat_twice{false};
+    int32_t op;
+    while (auto comp_op = isCompOp(lexer, eat_twice, op)) {
+        lexer.consume(lexer.curr->getType());
+        if (eat_twice)
+            lexer.consume(lexer.curr->getType());
         const auto rhs = parseExpr(lexer);
-        node = new Comparison(node, rhs, current_token->getType());
+        node = new Comparison(node, rhs, op);
     }
 
     return node;
@@ -1519,7 +1666,6 @@ Node *parsePower(PyLexer &lexer) {
 }
 
 Node *parseAtomExpr(PyLexer &lexer) {
-
     if (lexer.curr->getType() == Python3Parser::AWAIT) {
         lexer.consume(Python3Parser::AWAIT);
     }
@@ -1565,7 +1711,8 @@ Node *parseAtomExpr(PyLexer &lexer) {
 
 static Node *parseTestlistCompCommaSeparated(Node *value, PyLexer &lexer) {
     auto list = new List({value});
-    while (lexer.curr->getType() == Python3Parser::COMMA) {
+    while (lexer.curr->getType() == Python3Parser::COMMA &&
+           (isTest(lexer.next) || lexer.next->getType() == Python3Parser::STAR)) {
         lexer.consume(Python3Parser::COMMA);
 
         switch (lexer.curr->getType()) {
@@ -1601,6 +1748,10 @@ static Node *parseTestlistCompCommaSeparated(Node *value, PyLexer &lexer) {
             }
         }
     }
+    if (lexer.curr->getType() == Python3Parser::COMMA) {
+        lexer.consume(Python3Parser::COMMA);
+    }
+
     return list;
 }
 
@@ -1836,8 +1987,10 @@ Node *parseAtom(PyLexer &lexer) {
             lexer.consume(Python3Parser::TRUE);
             break;
         }
-        default:
-        ERR_MSG_EXIT("Encountered an unknown node");
+        default: {
+            printf("%s", current_token->getText().c_str());
+            ERR_MSG_EXIT("Encountered an unknown node");
+        }
     }
 
     return node;
@@ -1866,7 +2019,6 @@ Node *parseCompFor(PyLexer &lexer) {
 }
 
 Node *parseDict(PyLexer &lexer) {
-
     const auto key = parseTest(lexer);
     lexer.consume(Python3Parser::COLON);
     const auto value = parseTest(lexer);
@@ -2237,7 +2389,7 @@ Node *parseArithExpr(PyLexer &lexer) {
 
 Node *buildAst(PyLexer &lexer) {
     lexer.updateCurr(1);
-    return parseAsyncFuncDef(lexer, {});
+    return parseFileInput(lexer);
 }
 
 void destroyNode(Node *root) {

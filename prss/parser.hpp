@@ -7,12 +7,13 @@
 #include <any>
 #include <sstream>
 #include <map>
+#include <execinfo.h>
 
 #include <numeric>
 #include "antlr4-runtime.h"
 #include "Python3Lexer.h"
 
-#define ERR_TOK(expected_token_type) fprintf(stderr, "expected token %d", expected_token_type)
+#define ERR_TOK(expected_token_type) fprintf(stderr, "expected token %d", expected_token_type);
 #define ERR_MSG(message) fprintf(stderr, message)
 #define ERR_MSG_EXIT(message) ERR_MSG(message); exit(1)
 // TODO(threadedstream): define cleanup exit macro
@@ -21,15 +22,28 @@
 template<typename T>
 using opt = std::optional<T>;
 
-using namespace antlr4;
 
-// TODO(threadedstream): quicky build a lexer and expression flattener
+using namespace antlr4;
 
 enum class AssignFlag : uint8_t {
     OP_ASSIGN = 0,
 };
 
+enum {
+    NOT_IN = 1,
+    LESS_THAN,
+    GREATER_THAN,
+    EQUALS,
+    GT_EQ,
+    LT_EQ,
+    NOT_EQ_2,
+    IN,
+    IS,
+    IS_NOT
+};
+
 struct Node;
+struct FileInput;
 struct Module;
 struct SimpleStmt;
 struct FuncDef;
@@ -103,6 +117,12 @@ class PyLexer;
 
 
 int32_t astNumNodes(Node *node);
+
+Node *parseSingleInput(PyLexer &lexer);
+
+Node *parseFileInput(PyLexer &lexer);
+
+Node *parseEvalInput(PyLexer &lexer);
 
 Node *parseAtomExpr(PyLexer &lexer);
 
@@ -273,6 +293,33 @@ Node *buildAst(PyLexer &lexer);
 void destroyNode(Node *root);
 
 namespace tok_utils {
+    static const char *comparisonOpToStr(const int32_t op) {
+        switch (op) {
+            case NOT_IN:
+                return "NotIn";
+            case LESS_THAN:
+                return "LessThan";
+            case GREATER_THAN:
+                return "GreaterThan";
+            case EQUALS:
+                return "Equals";
+            case GT_EQ:
+                return "GtEq";
+            case LT_EQ:
+                return "LtEQ";
+            case NOT_EQ_2:
+                return "NotEq2";
+            case IN:
+                return "In";
+            case IS:
+                return "Is";
+            case IS_NOT:
+                return "IsNot";
+            default:
+                return "Unknown";
+        }
+    }
+
     static std::map<int32_t, std::string> tokTypeToStr = {
             {Python3Parser::STRING,             "TokString"},
             {Python3Parser::NUMBER,             "TokNumber"},
@@ -421,7 +468,7 @@ public:
             updateCurr(1);
         } else {
             // TODO(threadedstream): do cleanup
-            fprintf(stderr, "expected %s", tok_utils::tokTypeToStr[token_type].c_str());
+            fprintf(stderr, "expected %s at line %ld", tok_utils::tokTypeToStr[token_type].c_str(), curr->getLine());
             exit(1);
         }
     }
@@ -466,6 +513,49 @@ inline Position getTokPos(const Token *tok) {
     pos.col_end_idx = tok->getStopIndex();
 
     return pos;
+}
+
+static inline bool isStmt(const Token *tok) {
+    const auto current_token_type = tok->getType();
+    return current_token_type == Python3Parser::STRING ||
+           current_token_type == Python3Parser::NUMBER ||
+           current_token_type == Python3Parser::DEF ||
+           current_token_type == Python3Parser::RETURN ||
+           current_token_type == Python3Parser::RAISE ||
+           current_token_type == Python3Parser::FROM ||
+           current_token_type == Python3Parser::IMPORT ||
+           current_token_type == Python3Parser::GLOBAL ||
+           current_token_type == Python3Parser::NONLOCAL ||
+           current_token_type == Python3Parser::ASSERT ||
+           current_token_type == Python3Parser::IF ||
+           current_token_type == Python3Parser::WHILE ||
+           current_token_type == Python3Parser::FOR ||
+           current_token_type == Python3Parser::TRY ||
+           current_token_type == Python3Parser::WITH ||
+           current_token_type == Python3Parser::LAMBDA ||
+           current_token_type == Python3Parser::NOT ||
+           current_token_type == Python3Parser::NONE ||
+           current_token_type == Python3Parser::TRUE ||
+           current_token_type == Python3Parser::FALSE ||
+           current_token_type == Python3Parser::CLASS ||
+           current_token_type == Python3Parser::YIELD ||
+           current_token_type == Python3Parser::DEL ||
+           current_token_type == Python3Parser::PASS ||
+           current_token_type == Python3Parser::CONTINUE ||
+           current_token_type == Python3Parser::BREAK ||
+           current_token_type == Python3Parser::ASYNC ||
+           current_token_type == Python3Parser::AWAIT ||
+           current_token_type == Python3Parser::NEWLINE ||
+           current_token_type == Python3Parser::NAME ||
+           current_token_type == Python3Parser::ELLIPSIS ||
+           current_token_type == Python3Parser::STAR ||
+           current_token_type == Python3Parser::OPEN_PAREN ||
+           current_token_type == Python3Parser::OPEN_BRACK ||
+           current_token_type == Python3Parser::ADD ||
+           current_token_type == Python3Parser::MINUS ||
+           current_token_type == Python3Parser::NOT_OP ||
+           current_token_type == Python3Parser::OPEN_BRACE ||
+           current_token_type == Python3Parser::AT;
 }
 
 inline bool isAugAssign(const Token *tok) {
@@ -541,7 +631,7 @@ inline bool isTestlistComp(const Token *tok) {
            token_type == Python3Parser::OPEN_BRACE;
 }
 
-inline bool isCompOp(PyLexer &lexer) {
+inline bool isCompOp(PyLexer &lexer, bool &eat_twice, int32_t &op_type) {
     if (!lexer.curr || !lexer.next) {
         return false;
     }
@@ -549,18 +639,25 @@ inline bool isCompOp(PyLexer &lexer) {
     const auto token_type = lexer.curr->getType();
     const auto next_token_type = lexer.next->getType();
 
-    return token_type == Python3Parser::LESS_THAN ||
-           token_type == Python3Parser::GREATER_THAN ||
-           token_type == Python3Parser::EQUALS ||
-           token_type == Python3Parser::GT_EQ ||
-           token_type == Python3Parser::LT_EQ ||
-           token_type == Python3Parser::NOT_EQ_2 ||
-           token_type == Python3Parser::IN ||
-           (token_type == Python3Parser::NOT && next_token_type == Python3Parser::IN) ||
-           token_type == Python3Parser::IS ||
-           (token_type == Python3Parser::IS && next_token_type == Python3Parser::NOT);
-}
+    if (token_type == Python3Parser::NOT && next_token_type == Python3Parser::IN
+        && (token_type == Python3Parser::IS && next_token_type == Python3Parser::NOT) && eat_twice) {
+        eat_twice = true;
+    } else if (eat_twice) {
+        eat_twice = false;
+    }
 
+    return (op_type = (LESS_THAN * (token_type == Python3Parser::LESS_THAN)) ||
+                      (GREATER_THAN * (token_type == Python3Parser::GREATER_THAN)) ||
+                      (EQUALS * (token_type == Python3Parser::EQUALS)) ||
+                      (GT_EQ * (token_type == Python3Parser::GT_EQ)) ||
+                      (LT_EQ * (token_type == Python3Parser::LT_EQ)) ||
+                      (NOT_EQ_2 * (token_type == Python3Parser::NOT_EQ_2)) ||
+                      (IN * (token_type == Python3Parser::IN)) ||
+                      (NOT_IN * (token_type == Python3Parser::NOT && next_token_type == Python3Parser::IN)) ||
+                      (IS * token_type == Python3Parser::IS) ||
+                      (IS_NOT * (token_type == Python3Parser::IS && next_token_type == Python3Parser::NOT)));
+
+}
 
 struct Node {
     // TODO(threadedstream): fill in the rest
@@ -578,6 +675,13 @@ struct Node {
     virtual void addChild(Node *n, const bool next_arg = false) noexcept {}
 
     Position pos_info;
+};
+
+struct FileInput : public Node {
+    explicit FileInput(const std::vector<Node *> statements)
+            : statements(statements) {}
+
+    std::vector<Node *> statements;
 };
 
 struct Module : public Node {
@@ -606,6 +710,8 @@ struct Comprehension : public Node {
         auto temp = ifs;
         temp.push_back(target);
         temp.push_back(iter);
+
+        return temp;
     }
 
     Node *target;
@@ -729,7 +835,7 @@ struct Stmt : public Node {
     }
 
     virtual std::vector<Node *> getChildren() {
-        auto temp =  nodes;
+        auto temp = nodes;
         return temp;
     }
 
@@ -760,9 +866,9 @@ struct ForStmt : public Node {
 
 struct AsyncForStmt : public Node {
     explicit AsyncForStmt(Node *target, Node *iter, Node *body, Node *or_else)
-    : target(target), iter(iter), body(body), or_else(or_else) {}
+            : target(target), iter(iter), body(body), or_else(or_else) {}
 
-    explicit AsyncForStmt(ForStmt *for_stmt, bool destroy_for_stmt):
+    explicit AsyncForStmt(ForStmt *for_stmt, bool destroy_for_stmt) :
             target(for_stmt->target), iter(for_stmt->iter), body(for_stmt->body), or_else(for_stmt->or_else) {
         if (destroy_for_stmt) {
             delete for_stmt;
@@ -804,11 +910,20 @@ struct AsyncWithStmt : public Node {
 
     explicit AsyncWithStmt(WithStmt *with_stmt, bool destroy_with_stmt)
             : body(with_stmt->body), type_comment(with_stmt->type_comment), items(with_stmt->items) {
-        if (destroy_with_stmt){
+        if (destroy_with_stmt) {
             delete with_stmt;
             with_stmt = nullptr;
         }
     }
+
+    virtual std::vector<Node *> getChildren() override {
+        // coalesce two vectors into the single one
+        auto temp = items;
+        temp.push_back(body);
+        temp.push_back(type_comment);
+        return temp;
+    }
+
 
     Node *body;
     Node *type_comment;
@@ -883,7 +998,7 @@ struct ClassDef : public Node {
     virtual std::vector<Node *> getChildren() override {
         auto temp = decorator_list;
         temp.push_back(body);
-        temp.push_back(dynamic_cast<Node*>(arguments));
+        temp.push_back(reinterpret_cast<Node *>(arguments));
         return temp;
     }
 
@@ -930,7 +1045,7 @@ struct Import : public Node {
             : aliases(aliases) {}
 
     virtual std::vector<Node *> getChildren() override {
-        return {dynamic_cast<Node *>(aliases)};
+        return {reinterpret_cast<Node *>(aliases)};
     }
 
     Aliases *aliases;
@@ -941,7 +1056,7 @@ struct ImportFrom : public Node {
             : module(module), aliases(aliases), level(level) {}
 
     virtual std::vector<Node *> getChildren() override {
-        return {module, dynamic_cast<Node *>(aliases)};
+        return {module, reinterpret_cast<Node *>(aliases)};
     }
 
     Node *module;
@@ -1010,7 +1125,7 @@ struct Assign : public Node {
 
 struct AugAssign : public Node {
     explicit AugAssign(Node *target, const int32_t op, Node *value)
-            : target(target), value(value), op(op)  {}
+            : target(target), value(value), op(op) {}
 
 
     virtual std::vector<Node *> getChildren() override {
@@ -1352,7 +1467,7 @@ struct Comparison : public Node {
     std::string str() const noexcept override {
         std::ostringstream comparison_str;
         comparison_str << "Comparison(left=" << left->str() << ",right=" << right->str() << ",op="
-                       << tok_utils::tokTypeToStr[op]
+                       << tok_utils::comparisonOpToStr(op)
                        << ")";
         return comparison_str.str();
     }
@@ -1381,6 +1496,7 @@ struct FuncDef : public Node {
         temp.push_back(parameters);
         temp.push_back(body);
         temp.push_back(return_type);
+        return temp;
     }
 
     std::string name;
@@ -1412,6 +1528,7 @@ struct AsyncFuncDef : public Node {
         temp.push_back(body);
         temp.push_back(return_type);
         temp.push_back(type_comment);
+        return temp;
     }
 
     std::string name;
