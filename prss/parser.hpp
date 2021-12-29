@@ -468,7 +468,7 @@ public:
             updateCurr(1);
         } else {
             // TODO(threadedstream): do cleanup
-            fprintf(stderr, "expected %s at line %ld", tok_utils::tokTypeToStr[token_type].c_str(), curr->getLine());
+            fprintf(stderr, "expected %s, but got %s at line %ld", tok_utils::tokTypeToStr[token_type].c_str(), tok_utils::tokTypeToStr[curr->getType()].c_str(), curr->getLine());
             exit(1);
         }
     }
@@ -639,8 +639,8 @@ inline bool isCompOp(PyLexer &lexer, bool &eat_twice, int32_t &op_type) {
     const auto token_type = lexer.curr->getType();
     const auto next_token_type = lexer.next->getType();
 
-    if (token_type == Python3Parser::NOT && next_token_type == Python3Parser::IN
-        && (token_type == Python3Parser::IS && next_token_type == Python3Parser::NOT) && eat_twice) {
+    if ((token_type == Python3Parser::NOT && next_token_type == Python3Parser::IN) ||
+        (token_type == Python3Parser::IS && next_token_type == Python3Parser::NOT)) {
         eat_twice = true;
     } else if (eat_twice) {
         eat_twice = false;

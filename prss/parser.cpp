@@ -488,8 +488,26 @@ Node *parseSmallStmt(PyLexer &lexer) {
         case Python3Parser::RAISE:
         case Python3Parser::YIELD:
             return parseFlowStmt(lexer);
-        default:
+        case Python3Parser::STAR:
+        case Python3Parser::STRING:
+        case Python3Parser::NUMBER:
+        case Python3Parser::LAMBDA:
+        case Python3Parser::NOT:
+        case Python3Parser::NONE:
+        case Python3Parser::TRUE:
+        case Python3Parser::FALSE:
+        case Python3Parser::AWAIT:
+        case Python3Parser::NAME:
+        case Python3Parser::ELLIPSIS:
+        case Python3Parser::OPEN_PAREN:
+        case Python3Parser::OPEN_BRACK:
+        case Python3Parser::ADD:
+        case Python3Parser::MINUS:
+        case Python3Parser::NOT_OP:
+        case Python3Parser::OPEN_BRACE:
             return parseExprStmt(lexer);
+        default:
+        ERR_MSG_EXIT("expected EXPR, DEL, PASS, FLOW, IMPORT, GLOBAL, NONLOCAL or ASSERT");
     }
 }
 
@@ -791,6 +809,8 @@ Node *parseCompoundStmt(PyLexer &lexer) {
             return parseForStmt(lexer);
         case Python3Parser::TRY:
             return parseTryStmt(lexer);
+        case Python3Parser::WITH:
+            return parseWithStmt(lexer);
         case Python3Parser::DEF:
             return parseFuncDef(lexer, {});
         case Python3Parser::CLASS:
@@ -799,8 +819,9 @@ Node *parseCompoundStmt(PyLexer &lexer) {
             return parseDecorated(lexer);
         case Python3Parser::ASYNC:
             return parseAsyncStmt(lexer);
-        default:
-        ERR_MSG_EXIT("expected IF, WHILE, FOR, TRY, DEF, CLASS, AT or ASYNC");
+        default: {
+            ERR_MSG_EXIT("expected IF, WHILE, FOR, TRY, DEF, CLASS, AT or ASYNC");
+        }
     }
 }
 
@@ -1363,8 +1384,9 @@ Node *parseNotTest(PyLexer &lexer) {
             node = parseComparison(lexer);
             break;
         }
-        default:
+        default: {
             ERR_MSG_EXIT("expected NOT or EXPR");
+        }
     }
 
     return node;
@@ -1431,14 +1453,41 @@ TestList *parseTestlistStarExpr(PyLexer &lexer) {
 
     test_list->nodes.push_back(expr);
 
-    while (lexer.curr->getType() == Python3Parser::COMMA) {
-        Node *expr;
-        if (lexer.curr->getType() == Python3Parser::STAR) {
-            expr = parseStarExpr(lexer);
-        } else {
-            expr = parseTest(lexer);
+    while (lexer.curr->getType() == Python3Parser::COMMA &&
+           (lexer.next->getType() == Python3Parser::STAR || isTest(lexer.next))) {
+        lexer.consume(Python3Parser::COMMA);
+        switch (lexer.curr->getType()) {
+            case Python3Parser::STAR: {
+                test_list->nodes.push_back(parseStarExpr(lexer));
+                break;
+            }
+            case Python3Parser::STRING:
+            case Python3Parser::NUMBER:
+            case Python3Parser::LAMBDA:
+            case Python3Parser::NOT:
+            case Python3Parser::NONE:
+            case Python3Parser::TRUE:
+            case Python3Parser::FALSE:
+            case Python3Parser::AWAIT:
+            case Python3Parser::NAME:
+            case Python3Parser::ELLIPSIS:
+            case Python3Parser::OPEN_PAREN:
+            case Python3Parser::OPEN_BRACK:
+            case Python3Parser::ADD:
+            case Python3Parser::MINUS:
+            case Python3Parser::NOT_OP:
+            case Python3Parser::OPEN_BRACE: {
+                test_list->nodes.push_back(parseTest(lexer));
+                break;
+            }
+            default: {
+                ERR_MSG_EXIT("expected STAR or TEST");
+            }
         }
-        test_list->nodes.push_back(expr);
+    }
+
+    if (lexer.curr->getType() == Python3Parser::COMMA) {
+        lexer.consume(Python3Parser::COMMA);
     }
 
     return test_list;
@@ -1640,7 +1689,7 @@ Node *parseComparison(PyLexer &lexer) {
 
     bool eat_twice{false};
     int32_t op;
-    while (auto comp_op = isCompOp(lexer, eat_twice, op)) {
+    while (isCompOp(lexer, eat_twice, op)) {
         lexer.consume(lexer.curr->getType());
         if (eat_twice)
             lexer.consume(lexer.curr->getType());
@@ -1700,6 +1749,7 @@ Node *parseAtomExpr(PyLexer &lexer) {
                 lexer.consume(Python3Parser::NAME);
                 attribute->attr = new Name(current_token->getText());
                 atom = attribute;
+                break;
             }
             default:
             ERR_MSG_EXIT("Expected OPEN_PAREN, OPEN_BRACK or DOT");
@@ -1794,6 +1844,7 @@ Node *parseTestlistComp(PyLexer &lexer) {
                     return parseTestlistCompCommaSeparated(value, lexer);
                 }
             }
+            break;
         }
         case Python3Parser::STAR: {
             const auto value = parseStarExpr(lexer);
@@ -1803,7 +1854,6 @@ Node *parseTestlistComp(PyLexer &lexer) {
         ERR_MSG_EXIT("Expected TEST or STAR");
     }
 }
-
 
 Subscript *parseSubscriptList(PyLexer &lexer) {
     auto subscript = parseSubscript(lexer);
@@ -1840,24 +1890,6 @@ Subscript *parseSubscriptList(PyLexer &lexer) {
     }
 
     return subscript;
-
-//    auto subscript_list = new SubscriptList(nullptr, {});
-//    const auto subscript = parseSubscript(lexer);
-//
-//    subscript_list->subscripts.push_back(subscript);
-//
-//    while (lexer.curr->getType() == Python3Parser::COMMA && isTest(lexer.next)) {
-//        lexer.consume(Python3Parser::COMMA);
-//
-//        const auto subscript = parseSubscript(lexer);
-//        subscript_list->subscripts.push_back(subscript);
-//    }
-//
-//    if (lexer.curr->getType() == Python3Parser::COMMA) {
-//        lexer.consume(Python3Parser::COMMA);
-//    }
-//
-//    return subscript_list;
 }
 
 Subscript *parseSubscript(PyLexer &lexer) {
@@ -1880,14 +1912,27 @@ Subscript *parseSubscript(PyLexer &lexer) {
             }
             subscript->slice = slice;
         } else {
-            // just a mere constant
             subscript->slice = new Index(value);
         }
-    } else {
-        ERR_MSG_EXIT("Expected TEST");
-    }
+        return subscript;
+    } else if (lexer.curr->getType() == Python3Parser::COLON) {
+        lexer.consume(Python3Parser::COLON);
+        subscript = new Subscript(nullptr, nullptr);
+        auto slice = new Slice(nullptr, nullptr, nullptr);
+        if (isTest(lexer.curr)) {
+            slice->upper = parseTest(lexer);
+        }
+        if (lexer.curr->getType() == Python3Parser::COLON) {
+            lexer.consume(Python3Parser::COLON);
 
-    return subscript;
+            if (isTest(lexer.curr)) {
+                slice->step = parseTest(lexer);
+            }
+        }
+        subscript->slice = slice;
+    } else {
+        ERR_MSG_EXIT("expected TEST or COLON");
+    }
 }
 
 Node *parseAtom(PyLexer &lexer) {
@@ -1898,15 +1943,33 @@ Node *parseAtom(PyLexer &lexer) {
             lexer.consume(Python3Parser::OPEN_PAREN);
 
             switch (lexer.curr->getType()) {
-                case Python3Parser::YIELD:
+                case Python3Parser::YIELD: {
                     node = parseYieldExpr(lexer);
                     break;
+                }
+                case Python3Parser::STRING:
+                case Python3Parser::NUMBER:
+                case Python3Parser::LAMBDA:
+                case Python3Parser::NOT:
+                case Python3Parser::NONE:
+                case Python3Parser::TRUE:
+                case Python3Parser::FALSE:
+                case Python3Parser::AWAIT:
+                case Python3Parser::NAME:
+                case Python3Parser::ELLIPSIS:
+                case Python3Parser::OPEN_PAREN:
+                case Python3Parser::OPEN_BRACK:
+                case Python3Parser::ADD:
+                case Python3Parser::MINUS:
+                case Python3Parser::NOT_OP:
+                case Python3Parser::OPEN_BRACE:
+                case Python3Parser::STAR: {
+                    node = parseTestlistComp(lexer);
+                    break;
+                }
                 default:
-                    if (isTestlistComp(lexer.curr))
-                        node = parseTestlistComp(lexer);
                     break;
             }
-
             lexer.consume(Python3Parser::CLOSE_PAREN);
             break;
         }
@@ -2097,8 +2160,15 @@ static Node *parseDictorsetmakerTestColon(PyLexer &lexer) {
             }
             return dict;
         }
-        default:
-        ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
+        default: {
+            if (lexer.curr->getType() == Python3Parser::CLOSE_BRACE) {
+                // how horrific it is
+                auto dict = new Dict({key}, {value});
+                return dict;
+            } else {
+                ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
+            }
+        }
     }
 }
 
@@ -2158,8 +2228,15 @@ static Node *parseDictorsetmakerTest(PyLexer &lexer) {
             }
             return set;
         }
-        default:
-        ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
+        default: {
+            if (lexer.curr->getType() == Python3Parser::CLOSE_BRACE) {
+                // how horrific it is
+                auto set = new Set({value});
+                return set;
+            } else {
+                ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
+            }
+        }
     }
 }
 
