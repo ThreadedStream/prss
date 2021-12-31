@@ -1034,6 +1034,7 @@ Node *parseYieldExpr(PyLexer &lexer) {
         return yield_from;
     }
 
+
     auto yield_stmt = new Yield(nullptr);
 
     yield_stmt->target = parseTestlist(lexer);
@@ -1417,8 +1418,8 @@ Node *parseTest(PyLexer &lexer) {
             lexer.consume(Python3Parser::ELSE);
             const auto else_body = parseTest(lexer);
             node = new IfStmt(if_test, node, else_body);
-        }
             break;
+        }
         case Python3Parser::LAMBDA:
             node = parseLambDef(lexer);
             break;
@@ -1805,8 +1806,88 @@ static Node *parseTestlistCompCommaSeparated(Node *value, PyLexer &lexer) {
     return list;
 }
 
+Node *parseTestlistComp2(PyLexer &lexer) {
+    std::cout << lexer.curr->getText() << '\n';
+    switch (lexer.curr->getType()) {
+        case Python3Parser::STRING:
+        case Python3Parser::NUMBER:
+        case Python3Parser::LAMBDA:
+        case Python3Parser::NOT:
+        case Python3Parser::NONE:
+        case Python3Parser::TRUE:
+        case Python3Parser::FALSE:
+        case Python3Parser::AWAIT:
+        case Python3Parser::NAME:
+        case Python3Parser::ELLIPSIS:
+        case Python3Parser::OPEN_PAREN:
+        case Python3Parser::OPEN_BRACK:
+        case Python3Parser::ADD:
+        case Python3Parser::MINUS:
+        case Python3Parser::NOT_OP:
+        case Python3Parser::OPEN_BRACE: {
+            parseTest(lexer);
+            break;
+        }
+        case Python3Parser::STAR: {
+            parseStarExpr(lexer);
+            break;
+        }
+        default: {
+            ERR_MSG_EXIT("expected TEST or STAR");
+        }
+    }
+    switch (lexer.curr->getType()) {
+        case Python3Parser::FOR:
+        case Python3Parser::ASYNC: {
+            parseCompFor(lexer);
+        }
+        case Python3Parser::CLOSE_PAREN:
+        case Python3Parser::COMMA:
+        case Python3Parser::CLOSE_BRACK: {
+            while (lexer.curr->getType() == Python3Parser::COMMA &&
+                    (isTest(lexer.next) || lexer.next->getType() == Python3Parser::STAR)) {
+                lexer.consume(Python3Parser::COMMA);
+                switch (lexer.curr->getType()) {
+                    case Python3Parser::STRING:
+                    case Python3Parser::NUMBER:
+                    case Python3Parser::LAMBDA:
+                    case Python3Parser::NOT:
+                    case Python3Parser::NONE:
+                    case Python3Parser::TRUE:
+                    case Python3Parser::FALSE:
+                    case Python3Parser::AWAIT:
+                    case Python3Parser::NAME:
+                    case Python3Parser::ELLIPSIS:
+                    case Python3Parser::OPEN_PAREN:
+                    case Python3Parser::OPEN_BRACK:
+                    case Python3Parser::ADD:
+                    case Python3Parser::MINUS:
+                    case Python3Parser::NOT_OP:
+                    case Python3Parser::OPEN_BRACE: {
+                        parseTest(lexer);
+                        break;
+                    }
+                    case Python3Parser::STAR: {
+                        parseStarExpr(lexer);
+                        break;
+                    }
+                    default: {
+                        ERR_MSG_EXIT("Expected TEST or STAR");
+                    }
+                }
+            }
+
+            if (lexer.curr->getType() == Python3Parser::COMMA) {
+                lexer.consume(Python3Parser::COMMA);
+            }
+        }
+    }
+}
+
+
 // testlist_comp: (test|star_expr) ( comp_for | (',' (test|star_expr))* (',')? );
 Node *parseTestlistComp(PyLexer &lexer) {
+    std::cout << lexer.curr->getText() << '\n';
     switch (lexer.curr->getType()) {
         case Python3Parser::STRING:
         case Python3Parser::NUMBER:
@@ -1844,7 +1925,7 @@ Node *parseTestlistComp(PyLexer &lexer) {
                     return parseTestlistCompCommaSeparated(value, lexer);
                 }
             }
-            break;
+            return value;
         }
         case Python3Parser::STAR: {
             const auto value = parseStarExpr(lexer);

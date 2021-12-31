@@ -255,7 +255,7 @@ exprlist: (expr|star_expr) (',' (expr|star_expr))* (',')?;
 testlist: test (',' test)* (',')?;
 dictorsetmaker: ( ((test ':' test | '**' expr)
                    (comp_for | (',' (test ':' test | '**' expr))* (',')?)) |
-                  ((test | star_expr)
+	((test | star_expr)
                    (comp_for | (',' (test | star_expr))* (',')?)) );
 
 classdef: 'class' NAME ('(' (arglist)? ')')? ':' suite;

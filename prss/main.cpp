@@ -30,12 +30,12 @@ int main(int argc, const char *argv[]) {
 
     PyLexer lexer(argv[1]);
 
-    auto root = buildAst(lexer);
+    //auto root = buildAst(lexer);
 
     //const auto ast_str = root->str();
-    //parseAntlr("/home/glasser/toys/prss/sources/sample.py");
+    parseAntlr(argv[1]);
 
-    destroyNode(root);
+    //destroyNode(root);
 
     return 0;
 }
