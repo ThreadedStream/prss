@@ -13,9 +13,11 @@
 #include "antlr4-runtime.h"
 #include "Python3Lexer.h"
 
+#define NO_ARGS
+
 #define ERR_TOK(expected_token_type) fprintf(stderr, "expected token %d", expected_token_type);
-#define ERR_MSG(message) fprintf(stderr, message)
-#define ERR_MSG_EXIT(message) ERR_MSG(message); exit(1)
+#define ERR_MSG(message, ...)
+#define ERR_MSG_EXIT(message, ...) fprintf(stderr, message, __VA_ARGS__); exit(1)
 // TODO(threadedstream): define cleanup exit macro
 //#define ERR_MSG_CLEANUP_EXIT(message) ERR_MSG(message); destroyAst()
 
@@ -646,6 +648,7 @@ inline bool isCompOp(PyLexer &lexer, bool &eat_twice, int32_t &op_type) {
         eat_twice = false;
     }
 
+
     return (op_type = (LESS_THAN * (token_type == Python3Parser::LESS_THAN)) ||
                       (GREATER_THAN * (token_type == Python3Parser::GREATER_THAN)) ||
                       (EQUALS * (token_type == Python3Parser::EQUALS)) ||
@@ -654,7 +657,7 @@ inline bool isCompOp(PyLexer &lexer, bool &eat_twice, int32_t &op_type) {
                       (NOT_EQ_2 * (token_type == Python3Parser::NOT_EQ_2)) ||
                       (IN * (token_type == Python3Parser::IN)) ||
                       (NOT_IN * (token_type == Python3Parser::NOT && next_token_type == Python3Parser::IN)) ||
-                      (IS * token_type == Python3Parser::IS) ||
+                      (IS * (token_type == Python3Parser::IS)) ||
                       (IS_NOT * (token_type == Python3Parser::IS && next_token_type == Python3Parser::NOT)));
 
 }

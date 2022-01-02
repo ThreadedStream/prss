@@ -1,1 +1,3 @@
-[x for x, y in range(30) for y in range(600) if x == y ]
+@some(x, y)
+def function(x, y):
+    pass

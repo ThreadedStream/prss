@@ -644,20 +644,24 @@ Node *parseDottedName(PyLexer &lexer, bool as_attr) {
     } else {
         const auto attr_value_token = lexer.curr;
         lexer.consume(Python3Parser::NAME);
-        auto attribute = new Attribute(new Name(attr_value_token->getText()), nullptr);
-        lexer.consume(Python3Parser::DOT);
-        const auto attr_attr_token = lexer.curr;
-        lexer.consume(Python3Parser::NAME);
-        attribute->attr = new Name(attr_attr_token->getText());
-
-        while (lexer.curr->getType() == Python3Parser::DOT) {
+        if (lexer.curr->getType() == Python3Parser::DOT) {
+            auto attribute = new Attribute(new Name(attr_value_token->getText()), nullptr);
             lexer.consume(Python3Parser::DOT);
             const auto attr_attr_token = lexer.curr;
             lexer.consume(Python3Parser::NAME);
-            attribute = new Attribute(attribute, new Name(attr_attr_token->getText()));
-        }
+            attribute->attr = new Name(attr_attr_token->getText());
 
-        return attribute;
+            while (lexer.curr->getType() == Python3Parser::DOT) {
+                lexer.consume(Python3Parser::DOT);
+                const auto attr_attr_token = lexer.curr;
+                lexer.consume(Python3Parser::NAME);
+                attribute = new Attribute(attribute, new Name(attr_attr_token->getText()));
+            }
+
+            return attribute;
+        } else {
+            return new Name(attr_value_token->getText());
+        }
     }
 }
 
@@ -1242,7 +1246,7 @@ ExceptHandler *parseExceptClause(PyLexer &lexer) {
 Node *parseDecorator(PyLexer &lexer) {
     lexer.consume(Python3Parser::AT);
     auto call = new Call(nullptr, nullptr);
-    call->func = parseDottedName(lexer, true);
+    call->func = parseDottedName(lexer, false);
     if (lexer.curr->getType() == Python3Parser::OPEN_PAREN) {
         lexer.consume(Python3Parser::OPEN_PAREN);
         call->arguments = parseArglist(lexer);
@@ -2256,11 +2260,10 @@ static Node *parseDictorsetmakerTestColon(PyLexer &lexer) {
         }
         default: {
             if (lexer.curr->getType() == Python3Parser::CLOSE_BRACE) {
-                // how horrific it is
                 auto dict = new Dict({key}, {value});
                 return dict;
             } else {
-                ERR_MSG_EXIT("Expected COMP_FOR or COMMA");
+                ERR_MSG_EXIT("Expected COMP_FOR or COMMA at line %d", lexer.curr->getLine());
             }
         }
     }
@@ -2314,7 +2317,10 @@ static Node *parseDictorsetmakerTest(PyLexer &lexer) {
                     default: {
                         if (lexer.curr->getType() == Python3Parser::CLOSE_BRACE) {
                             break;
-                        } else {
+                       // how horrific it is
+                auto set = new Set({value});
+                return set;
+                 } else {
                             ERR_MSG_EXIT("expected TEST or STAR");
                         }
                     }
